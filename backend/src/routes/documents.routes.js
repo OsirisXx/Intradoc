@@ -1,0 +1,25 @@
+const express = require('express');
+const router = express.Router();
+const documentsController = require('../controllers/documents.controller');
+const { authenticate } = require('../middleware/auth');
+
+// All document routes require authentication
+router.use(authenticate);
+
+// Document CRUD operations
+router.get('/', documentsController.getDocuments);
+router.get('/section/:sectionId', documentsController.getDocumentsBySection);
+router.post('/upload', documentsController.uploadDocument);
+
+// Document approval workflow
+router.get('/pending-review', documentsController.getPendingReview);
+router.post('/:documentId/approve', documentsController.approveDocument);
+router.post('/:documentId/reject', documentsController.rejectDocument);
+router.post('/:documentId/request-revision', documentsController.requestRevision);
+router.post('/:documentId/forward-regional', documentsController.forwardToRegional);
+router.get('/:documentId/approval-history', documentsController.getApprovalHistory);
+
+// Legacy endpoint (keep for backward compatibility)
+router.post('/status', documentsController.updateDocumentStatus);
+
+module.exports = router;
