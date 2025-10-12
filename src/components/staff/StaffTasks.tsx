@@ -475,7 +475,7 @@ export function StaffTasks() {
                   </div>
                   
                   {/* Submission Details */}
-                  {task.LINKED_DOCUMENT_ID && task.linkedDocument && (
+                  {task.LINKED_DOCUMENT_ID && task.linkedDocument ? (
                     <div className="document-preview-section">
                       <div className="submission-info">
                         <h4>📄 Submitted Work</h4>
@@ -485,6 +485,17 @@ export function StaffTasks() {
                           {task.linkedDocument.DESCRIPTION && (
                             <span><strong>Description:</strong> {task.linkedDocument.DESCRIPTION}</span>
                           )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="document-preview-section no-submission">
+                      <div className="submission-info">
+                        <h4>📝 Submission Status</h4>
+                        <div className="no-submission-message">
+                          <span><strong>Status:</strong> No submitted work yet</span>
+                          <span><strong>Progress:</strong> Awaiting submission</span>
+                          <span><strong>Next Step:</strong> Complete the task</span>
                         </div>
                       </div>
                     </div>
