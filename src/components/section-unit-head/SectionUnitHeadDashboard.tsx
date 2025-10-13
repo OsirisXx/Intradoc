@@ -489,17 +489,6 @@ export function SectionUnitHeadDashboard() {
             <div className="action-badge">{stats.totalDocuments}</div>
           </button>
           
-          <button 
-            className="action-card-modern"
-            onClick={() => window.location.href = '/section-unit-head/task-assignment'}
-          >
-            <div className="action-icon-large">📝</div>
-            <div className="action-content">
-              <div className="action-title">Assign Tasks</div>
-              <div className="action-description">Create new assignments</div>
-            </div>
-            <div className="action-badge">{stats.teamMembers}</div>
-          </button>
           
           <button 
             className="action-card-modern"
