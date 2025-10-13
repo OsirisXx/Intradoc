@@ -980,6 +980,77 @@ class ApiService {
       return { success: false, error: 'Failed to delete post' };
     }
   }
+
+  // Document download with authentication
+  async downloadDocument(documentId: number): Promise<{ success: boolean; error?: string; blob?: Blob; filename?: string }> {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        return { success: false, error: 'Authentication token not found' };
+      }
+
+      const response = await fetch(`${this.baseUrl}/documents/download/${documentId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Download failed' }));
+        return { success: false, error: errorData.error || 'Download failed' };
+      }
+
+      // Get filename from Content-Disposition header
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = 'document';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      const blob = await response.blob();
+      return { success: true, blob, filename };
+    } catch (error) {
+      console.error('Error downloading document:', error);
+      return { success: false, error: 'Failed to download document' };
+    }
+  }
+
+  // Helper method to open document in new tab with authentication
+  async viewDocument(documentId: number): Promise<{ success: boolean; error?: string }> {
+    try {
+      const downloadResult = await this.downloadDocument(documentId);
+      
+      if (!downloadResult.success) {
+        return { success: false, error: downloadResult.error };
+      }
+
+      if (!downloadResult.blob) {
+        return { success: false, error: 'No document data received' };
+      }
+
+      // Create object URL and open in new tab
+      const url = URL.createObjectURL(downloadResult.blob);
+      const newWindow = window.open(url, '_blank', 'noopener,noreferrer');
+      
+      if (!newWindow) {
+        URL.revokeObjectURL(url);
+        return { success: false, error: 'Failed to open document. Please check your popup blocker settings.' };
+      }
+
+      // Clean up the object URL after a delay to allow the document to load
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 10000);
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error viewing document:', error);
+      return { success: false, error: 'Failed to view document' };
+    }
+  }
 }
 
 export const apiService = new ApiService();

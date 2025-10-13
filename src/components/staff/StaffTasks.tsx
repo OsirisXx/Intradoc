@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { apiService } from '../../services/api'
+import { DocumentViewModal } from '../common/DocumentViewModal'
 import './StaffTasks.css'
 
 interface Task {
@@ -30,6 +31,10 @@ export function StaffTasks() {
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card')
   const [submissionFilter, setSubmissionFilter] = useState<'all' | 'with_submission' | 'no_submission'>('all')
+  
+  // Document modal state
+  const [modalOpen, setModalOpen] = useState(false)
+  const [selectedDocument, setSelectedDocument] = useState<{ id: number; title: string; fallbackUrl?: string } | null>(null)
 
   useEffect(() => {
     if (user) {
@@ -84,19 +89,33 @@ export function StaffTasks() {
 
   // Document review handler functions
   const handleViewSubmission = (task: Task) => {
-    // For staff, this would open a view-only modal or navigate to document view
+    // Open document in modal
     if (task.LINKED_DOCUMENT_ID && task.linkedDocument) {
-      const link = task.linkedDocument.FILE_LINK || task.linkedDocument.DOCUMENT_URL || (task.linkedDocument as any).DOCUMENT_URL
-      if (link) {
-        window.open(link, '_blank', 'noopener,noreferrer')
-      } else {
-        alert('Document link not available. Please contact your supervisor.')
-      }
+      const documentId = task.linkedDocument.DOCUMENT_ID || task.LINKED_DOCUMENT_ID
+      const fileLink = task.linkedDocument.FILE_LINK || task.linkedDocument.DOCUMENT_URL || (task.linkedDocument as any).DOCUMENT_URL
+      const documentTitle = task.linkedDocument.TITLE || task.TITLE || 'Document'
+      
+      setSelectedDocument({
+        id: documentId,
+        title: documentTitle,
+        fallbackUrl: fileLink
+      })
+      setModalOpen(true)
     } else if (task.LINKED_DOCUMENT_ID) {
-      alert('Document information is loading. Please try again in a moment.')
+      // If we have a document ID but no linked document data
+      setSelectedDocument({
+        id: task.LINKED_DOCUMENT_ID,
+        title: task.TITLE || 'Document'
+      })
+      setModalOpen(true)
     } else {
       alert('No document linked to this task.')
     }
+  }
+
+  const handleCloseModal = () => {
+    setModalOpen(false)
+    setSelectedDocument(null)
   }
 
   const getStatusBadge = (status: string) => {
@@ -621,6 +640,17 @@ export function StaffTasks() {
             ))}
           </div>
         )}
+      
+      {/* Document View Modal */}
+      {selectedDocument && (
+        <DocumentViewModal
+          isOpen={modalOpen}
+          onClose={handleCloseModal}
+          documentId={selectedDocument.id}
+          documentTitle={selectedDocument.title}
+          fallbackUrl={selectedDocument.fallbackUrl}
+        />
+      )}
     </div>
   )
 }

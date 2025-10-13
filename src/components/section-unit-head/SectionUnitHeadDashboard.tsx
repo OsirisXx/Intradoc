@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { apiService } from '../../services/api'
 import * as Types from '../../types'
 import buildingImage from '../../assets/nia.png'
+import './SectionUnitHead.css'
 
 export function SectionUnitHeadDashboard() {
   const { user } = useAuth()

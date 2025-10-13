@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { apiService } from '../../services/api'
+import { DocumentViewModal } from '../common/DocumentViewModal'
 import * as Types from '../../types'
 
 export function StaffDocumentWorks() {
@@ -15,6 +16,10 @@ export function StaffDocumentWorks() {
   const [documentUrl, setDocumentUrl] = useState('')
   const [description, setDescription] = useState('')
   const [loading, setLoading] = useState(false)
+  
+  // Document view modal state
+  const [viewModalOpen, setViewModalOpen] = useState(false)
+  const [selectedDocument, setSelectedDocument] = useState<{ id: number; title: string; fallbackUrl?: string } | null>(null)
 
   useEffect(() => {
     if (user) {
@@ -82,6 +87,20 @@ export function StaffDocumentWorks() {
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] || null
     setSelectedFile(file)
+  }
+
+  const handleViewDocument = (document: Types.DocumentWithDetails) => {
+    setSelectedDocument({
+      id: document.DOCUMENT_ID,
+      title: document.TITLE,
+      fallbackUrl: document.FILE_LINK
+    })
+    setViewModalOpen(true)
+  }
+
+  const handleCloseViewModal = () => {
+    setViewModalOpen(false)
+    setSelectedDocument(null)
   }
 
   const handleUploadForTask = async (e: React.FormEvent) => {
@@ -274,6 +293,7 @@ export function StaffDocumentWorks() {
                     <th>STATUS</th>
                     <th>SHA-256</th>
                     <th>CREATED</th>
+                    <th>ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -283,6 +303,34 @@ export function StaffDocumentWorks() {
                       <td>{getStatusBadge(doc.currentStatus?.STATUS || 'Submitted')}</td>
                       <td>{doc.FINGERPRINT_HASH.substring(0, 12)}...</td>
                       <td>{formatDate(doc.CREATED_AT)}</td>
+                      <td>
+                        <button 
+                          className="view-document-btn"
+                          onClick={() => handleViewDocument(doc)}
+                          title="View document"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '4px 8px',
+                            backgroundColor: '#3b82f6',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#3b82f6'}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14,2 14,8 20,8"/>
+                          </svg>
+                          View
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -369,6 +417,17 @@ export function StaffDocumentWorks() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Document View Modal */}
+      {selectedDocument && (
+        <DocumentViewModal
+          isOpen={viewModalOpen}
+          onClose={handleCloseViewModal}
+          documentId={selectedDocument.id}
+          documentTitle={selectedDocument.title}
+          fallbackUrl={selectedDocument.fallbackUrl}
+        />
       )}
     </div>
   )

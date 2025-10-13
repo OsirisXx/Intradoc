@@ -3,6 +3,7 @@ import { apiService } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { DateTimePicker } from '../common/DateTimePicker';
 import * as Types from '../../types';
+import './SectionUnitHead.css';
 
 const SectionUnitHeadTasks: React.FC = () => {
   const { user } = useAuth();
@@ -361,6 +362,20 @@ const SectionUnitHeadTasks: React.FC = () => {
             
             <button
               className="btn btn-primary"
+              onClick={loadTasks}
+              disabled={loading}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', height: '2rem', padding: '0.375rem 0.75rem' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="23,4 23,10 17,10"/>
+                <polyline points="1,20 1,14 7,14"/>
+                <path d="M20.49,9A9,9,0,0,0,5.64,5.64L1,10m22,4L18.36,18.36A9,9,0,0,1,3.51,15"/>
+              </svg>
+              {loading ? 'Refreshing...' : 'Refresh'}
+            </button>
+            
+            <button
+              className="btn btn-primary"
               onClick={() => setShowCreateTaskModal(true)}
               style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', height: '2rem', padding: '0.375rem 0.75rem' }}
             >
@@ -589,7 +604,7 @@ const SectionUnitHeadTasks: React.FC = () => {
                   </div>
                   
                   {/* Submission Details */}
-                  {task.LINKED_DOCUMENT_ID && task.linkedDocument && (
+                  {task.LINKED_DOCUMENT_ID && task.linkedDocument ? (
                     <div className="document-preview-section">
                       <div className="submission-info">
                         <h4>📄 Submitted Work</h4>
@@ -599,6 +614,17 @@ const SectionUnitHeadTasks: React.FC = () => {
                           {task.linkedDocument.DESCRIPTION && (
                             <span><strong>Description:</strong> {task.linkedDocument.DESCRIPTION}</span>
                           )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="document-preview-section no-submission">
+                      <div className="submission-info">
+                        <h4>📝 Submission Status</h4>
+                        <div className="no-submission-message">
+                          <span><strong>Status:</strong> No submitted work yet</span>
+                          <span><strong>Progress:</strong> Awaiting submission</span>
+                          <span><strong>Next Step:</strong> Complete the task</span>
                         </div>
                       </div>
                     </div>

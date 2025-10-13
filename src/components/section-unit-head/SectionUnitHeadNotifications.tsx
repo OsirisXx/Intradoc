@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import * as Types from '../../types';
+import './SectionUnitHead.css';
 
 const SectionUnitHeadNotifications: React.FC = () => {
   const { user } = useAuth();
