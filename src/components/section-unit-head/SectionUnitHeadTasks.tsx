@@ -176,9 +176,34 @@ const SectionUnitHeadTasks: React.FC = () => {
   };
 
   const handleDownloadDocument = (fileLink: string, fileName: string) => {
+    // Extract just the filename from the file link
+    let downloadName = fileName;
+    
+    if (fileLink) {
+      if (fileLink.startsWith('http://') || fileLink.startsWith('https://')) {
+        // It's a URL
+        try {
+          const url = new URL(fileLink)
+          const pathSegments = url.pathname.split('/').filter(Boolean)
+          downloadName = pathSegments.length > 0 ? decodeURIComponent(pathSegments[pathSegments.length - 1]) : fileName
+        } catch {
+          downloadName = decodeURIComponent((fileLink as string).split('/').pop() || fileName)
+        }
+      } else {
+        // It's a file path (absolute or relative)
+        downloadName = fileLink.split(/[/\\]/).pop() || fileLink
+        // Remove any URL encoding if present
+        try {
+          downloadName = decodeURIComponent(downloadName)
+        } catch {
+          // If decode fails, use the original
+        }
+      }
+    }
+    
     const link = document.createElement('a');
     link.href = fileLink;
-    link.download = fileName;
+    link.download = downloadName;
     link.click();
   };
 

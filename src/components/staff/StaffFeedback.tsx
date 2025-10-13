@@ -10,6 +10,8 @@ export function StaffFeedback() {
   const [filter, setFilter] = useState<'all' | 'unread'>('all')
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [groupBy, setGroupBy] = useState<'none' | 'type' | 'author'>('none')
+  const [selectedFeedback, setSelectedFeedback] = useState<Types.TaskFeedbackWithDetails | null>(null)
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -248,7 +250,11 @@ export function StaffFeedback() {
                   cursor: 'pointer',
                   transition: 'all 0.2s ease'
                 }}
-                onClick={() => !feedback.READ && markAsRead(feedback.FEEDBACK_ID)}
+                onClick={() => {
+                  if (!feedback.READ) markAsRead(feedback.FEEDBACK_ID)
+                  setSelectedFeedback(feedback)
+                  setShowFeedbackModal(true)
+                }}
               >
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
                   <div style={{ fontSize: '24px', marginTop: '4px' }}>
@@ -420,7 +426,11 @@ export function StaffFeedback() {
                         cursor: 'pointer',
                         transition: 'all 0.2s ease'
                       }}
-                      onClick={() => !feedback.READ && markAsRead(feedback.FEEDBACK_ID)}
+                      onClick={() => {
+                        if (!feedback.READ) markAsRead(feedback.FEEDBACK_ID)
+                        setSelectedFeedback(feedback)
+                        setShowFeedbackModal(true)
+                      }}
                     >
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
                         <div style={{ fontSize: '24px', marginTop: '4px' }}>
@@ -555,6 +565,47 @@ export function StaffFeedback() {
           </div>
         )}
       </div>
+
+      {showFeedbackModal && selectedFeedback && (
+        <div className="modal-overlay" onClick={() => setShowFeedbackModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="modal-header">
+              <h3>Feedback Details</h3>
+              <button className="btn-close" onClick={() => setShowFeedbackModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
+                <div style={{ fontSize:24 }}>{getFeedbackIcon(selectedFeedback.TYPE)}</div>
+                <div>
+                  <div style={{ fontWeight:700 }}>{selectedFeedback.TYPE.replace(/_/g,' ').toUpperCase()}</div>
+                  <div style={{ color:'#64748b', fontSize:12 }}>{formatDate(selectedFeedback.CREATED_AT)}</div>
+                </div>
+              </div>
+              <div className="feedback-target">
+                <p><strong>From:</strong> {selectedFeedback.author?.NAME || 'Unknown'} {selectedFeedback.author?.FUNCTIONAL_ROLE ? `(${selectedFeedback.author.FUNCTIONAL_ROLE.replace(/_/g,' ')})` : ''}</p>
+                {selectedFeedback.RELATED_TASK_ID && (
+                  <p><strong>Task:</strong> {selectedFeedback.relatedTask?.TITLE || selectedFeedback.RELATED_TASK_ID}</p>
+                )}
+                {selectedFeedback.RELATED_DOCUMENT_ID && (
+                  <p><strong>Document ID:</strong> {selectedFeedback.RELATED_DOCUMENT_ID}</p>
+                )}
+              </div>
+              <div className="form-group">
+                <label>Content</label>
+                <div style={{ whiteSpace:'pre-wrap' }}>{selectedFeedback.CONTENT}</div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowFeedbackModal(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
+
+// Insert modal markup before closing wrapper
+// Note: Keep within component scope above in actual compilation
+
+// Modal at end of component return

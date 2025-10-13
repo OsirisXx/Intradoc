@@ -647,6 +647,10 @@
 
 /* Responsive Design */
 @media (max-width: 768px) {
+  .posts-container {
+    max-width: 680px;
+    padding: 8px 12px 20px 12px;
+  }
   .section-unit-head-feedback {
     padding: 0 16px;
   }
@@ -1381,6 +1385,19 @@
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 24px;
   margin-top: 24px;
+}
+
+/* Make the posts page use a comfortable single-column grid */
+.section-unit-head-posts .grid {
+  grid-template-columns: 1fr;
+  max-width: 1100px;
+  margin-inline: auto;
+}
+
+/* Section Unit Head posts: hide the top accent line on hover */
+.section-unit-head-posts .post-item::before,
+.section-unit-head-posts .post-item:hover::before {
+  content: none;
 }
 
 /* Card styles */
@@ -2420,6 +2437,10 @@ tr:hover {
 }
 
 @media (max-width: 480px) {
+  .posts-container {
+    max-width: 100%;
+    padding: 8px 12px 16px 12px;
+  }
   .auth-card {
     margin: 20px;
     padding: 24px 20px;
@@ -3580,6 +3601,12 @@ tr:hover {
   border-radius: 0 0 12px 12px;
 }
 
+/* Staff stream posts: hide the top accent line on hover */
+.stream-posts-section .post-card::before,
+.stream-posts-section .post-card:hover::before {
+  content: none;
+}
+
 .stream-posts-content::-webkit-scrollbar {
   width: 6px;
 }
@@ -3615,7 +3642,7 @@ tr:hover {
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .post-card::before {
@@ -3655,7 +3682,7 @@ tr:hover {
   text-transform: uppercase;
   letter-spacing: 0.8px;
   box-shadow: 0 4px 12px rgba(1, 152, 49, 0.4), 0 2px 4px rgba(1, 152, 49, 0.3);
-  z-index: 10;
+  z-index: 100;
   border: 2px solid #ffffff;
   animation: pulse-glow 2s ease-in-out infinite alternate;
 }
@@ -3674,7 +3701,7 @@ tr:hover {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .post-avatar {
@@ -3742,10 +3769,10 @@ tr:hover {
 .post-author-name {
   font-weight: 700;
   color: #0f172a;
-  font-size: 16px;
+  font-size: 17px;
   margin: 0;
-  letter-spacing: -0.025em;
-  line-height: 1.4;
+  letter-spacing: -0.02em;
+  line-height: 1.5;
 }
 
 .post-author-role {
@@ -4084,8 +4111,11 @@ tr:hover {
 }
 
 .posts-container {
-  max-height: 800px;
-  overflow-y: auto;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 8px 8px 24px 8px;
+  max-height: none;
+  overflow: visible;
 }
 
 .posts-container::-webkit-scrollbar {
@@ -4109,19 +4139,19 @@ tr:hover {
 .posts-list {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 4px;
+  gap: 24px;
+  padding: 8px;
 }
 
 .post-item {
   background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
   border-radius: 16px;
-  padding: 32px;
+  padding: 28px;
   position: relative;
   border: 1px solid #e2e8f0;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
-  overflow: hidden;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  overflow: visible;
 }
 
 .post-item::before {
@@ -4139,8 +4169,8 @@ tr:hover {
 .post-item:hover {
   background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
   border-color: #019831;
-  box-shadow: 0 8px 32px rgba(1, 152, 49, 0.12), 0 4px 16px rgba(0, 0, 0, 0.08);
-  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 8px 24px rgba(1, 152, 49, 0.10), 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
 }
 
 .post-item:hover::before {
@@ -4276,15 +4306,15 @@ tr:hover {
   font-weight: 700;
   color: #0f172a;
   font-size: 20px;
-  margin: 0 0 12px 0;
-  letter-spacing: -0.025em;
-  line-height: 1.3;
+  margin: 0 0 10px 0;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
 }
 
 .post-message {
   color: #334155;
-  font-size: 15px;
-  line-height: 1.7;
+  font-size: 16px;
+  line-height: 1.75;
   margin: 0;
   font-weight: 400;
 }
@@ -4318,7 +4348,7 @@ tr:hover {
   font-size: 14px;
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid #e2e8f0;
@@ -7712,5 +7742,131 @@ tr:hover {
   
   .section-unit-head-notifications .action-btn .button-text {
     font-size: 0.75rem;
+  }
+}
+
+/* ============================================================================
+   SECTION UNIT HEAD DASHBOARD STATISTICS CARDS
+   ============================================================================ */
+
+/* Dashboard Container */
+.dashboard-container-modern {
+  padding: 24px;
+  background: #f8fafc;
+  min-height: 100vh;
+}
+
+/* Stats Section */
+.stats-section {
+  margin-bottom: 32px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+}
+
+/* Stat Cards */
+.stat-card {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.stat-icon {
+  font-size: 2.5rem;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+}
+
+.stat-content {
+  flex: 1;
+}
+
+.stat-number {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #005B1D; /* Dark green color */
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: #005B1D; /* Dark green color */
+  font-weight: 600;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-subtitle {
+  font-size: 0.75rem;
+  color: #005B1D; /* Dark green color */
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+/* Card Type Variations */
+.stat-card.documents .stat-icon {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+}
+
+.stat-card.pending .stat-icon {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+}
+
+.stat-card.tasks .stat-icon {
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+}
+
+.stat-card.my-tasks .stat-icon {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+}
+
+.stat-card.completion .stat-icon {
+  background: linear-gradient(135deg, #fefce8 0%, #fef3c7 100%);
+}
+
+.stat-card.team .stat-icon {
+  background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .stat-card {
+    padding: 20px;
+  }
+  
+  .stat-icon {
+    font-size: 2rem;
+    width: 50px;
+    height: 50px;
+  }
+  
+  .stat-number {
+    font-size: 1.75rem;
   }
 }

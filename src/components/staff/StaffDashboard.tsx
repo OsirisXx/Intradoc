@@ -11,6 +11,7 @@ export function StaffDashboard() {
   const [tasks, setTasks] = useState<any[]>([])
   const [streamPosts, setStreamPosts] = useState<Types.StreamPost[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedPost, setSelectedPost] = useState<Types.StreamPost | null>(null)
 
   useEffect(() => {
     if (user) {
@@ -112,6 +113,21 @@ export function StaffDashboard() {
     }
   }
 
+  const getAttachmentInfo = (link: string) => {
+    const href = link.startsWith('http') ? link : `http://localhost:3001${link}`
+    try {
+      const u = new URL(href)
+      const segments = u.pathname.split('/').filter(Boolean)
+      const last = segments.length > 0 ? decodeURIComponent(segments[segments.length - 1]) : ''
+      const name = last || u.hostname || href
+      const ext = last.includes('.') ? (last.split('.').pop() || '').toLowerCase() : ''
+      const type = ext ? ext.toUpperCase() : 'LINK'
+      return { href, name, type }
+    } catch {
+      return { href, name: href, type: 'LINK' }
+    }
+  }
+
   return (
     <div className="staff-dashboard">
       {/* Hero Banner with Building Image */}
@@ -177,7 +193,7 @@ export function StaffDashboard() {
                   {streamPosts.map(post => {
                     const isNew = new Date(post.CREATED_AT) > new Date(Date.now() - 24 * 60 * 60 * 1000) // 24 hours
                     return (
-                      <div key={post.POST_ID} className="post-card">
+                      <div key={post.POST_ID} className="post-card" onClick={() => setSelectedPost(post)}>
                         {isNew && <div className="post-badge-new">NEW!</div>}
                         <div className="post-header">
                           <div className="post-avatar">
@@ -192,6 +208,25 @@ export function StaffDashboard() {
                         <div className="post-message">
                           <div className="post-title">{post.TITLE}</div>
                           <div className="post-content">{post.MESSAGE}</div>
+                          {(post.ATTACHMENT_FILE_URL || post.ATTACHMENT_EXTERNAL_URL || post.ATTACHMENT_LINK) && (
+                            <div className="post-attachment">
+                              {post.ATTACHMENT_FILE_URL && (() => { const info = getAttachmentInfo(post.ATTACHMENT_FILE_URL!); return (
+                                <a href={info.href} target="_blank" rel="noopener noreferrer">
+                                  📎 {info.name} ({info.type})
+                                </a>
+                              )})()}
+                              {post.ATTACHMENT_EXTERNAL_URL && (() => { const info = getAttachmentInfo(post.ATTACHMENT_EXTERNAL_URL!); return (
+                                <a href={info.href} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 12 }}>
+                                  🔗 {info.name} ({info.type})
+                                </a>
+                              )})()}
+                              {post.ATTACHMENT_LINK && !post.ATTACHMENT_EXTERNAL_URL && (() => { const info = getAttachmentInfo(post.ATTACHMENT_LINK!); return (
+                                <a href={info.href} target="_blank" rel="noopener noreferrer">
+                                  📎 {info.name} ({info.type})
+                                </a>
+                              )})()}
+                            </div>
+                          )}
                           {isNew && <div className="post-checkmark">✓</div>}
                         </div>
                       </div>
@@ -201,6 +236,52 @@ export function StaffDashboard() {
               )}
             </div>
           </div>
+          {selectedPost && (
+            <div className="modal-overlay" onClick={() => setSelectedPost(null)}>
+              <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3>Post Details</h3>
+                  <button className="btn-close" onClick={() => setSelectedPost(null)}>×</button>
+                </div>
+                <div className="modal-body">
+                  <div className="post-header">
+                    <div className="post-avatar"><div className="avatar-icon"></div></div>
+                    <div className="post-author-info">
+                      <div className="post-author-name">{selectedPost.AUTHOR_NAME}</div>
+                      <div className="post-author-role">{selectedPost.AUTHOR_ROLE}</div>
+                    </div>
+                    <div className="post-date">{formatDate(selectedPost.CREATED_AT)}</div>
+                  </div>
+                  <div className="post-message">
+                    <div className="post-title">{selectedPost.TITLE}</div>
+                    <div className="post-content">{selectedPost.MESSAGE}</div>
+                    {(selectedPost.ATTACHMENT_FILE_URL || selectedPost.ATTACHMENT_EXTERNAL_URL || selectedPost.ATTACHMENT_LINK) && (
+                      <div className="post-attachment">
+                        {selectedPost.ATTACHMENT_FILE_URL && (() => { const info = getAttachmentInfo(selectedPost.ATTACHMENT_FILE_URL!); return (
+                          <a href={info.href} target="_blank" rel="noopener noreferrer">
+                            📎 {info.name} ({info.type})
+                          </a>
+                        )})()}
+                        {selectedPost.ATTACHMENT_EXTERNAL_URL && (() => { const info = getAttachmentInfo(selectedPost.ATTACHMENT_EXTERNAL_URL!); return (
+                          <a href={info.href} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 12 }}>
+                            🔗 {info.name} ({info.type})
+                          </a>
+                        )})()}
+                        {selectedPost.ATTACHMENT_LINK && !selectedPost.ATTACHMENT_EXTERNAL_URL && (() => { const info = getAttachmentInfo(selectedPost.ATTACHMENT_LINK!); return (
+                          <a href={info.href} target="_blank" rel="noopener noreferrer">
+                            📎 {info.name} ({info.type})
+                          </a>
+                        )})()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button className="btn btn-secondary" onClick={() => setSelectedPost(null)}>Close</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

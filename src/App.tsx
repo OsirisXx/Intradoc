@@ -45,6 +45,8 @@ import { SectionUnitHeadDocumentWorks } from './components/section-unit-head/Sec
 import { DivisionManagerTaskAssignment } from './components/division-manager/DivisionManagerTaskAssignment'
 import { DivisionManagerSendToRegional } from './components/division-manager/DivisionManagerSendToRegional'
 import { DivisionManagerReview } from './components/division-manager/DivisionManagerReview'
+import { DivisionManagerDashboard } from './components/division-manager/DivisionManagerDashboard'
+import { DivisionManagerDocumentWorks } from './components/division-manager/DivisionManagerDocumentWorks'
 
 // Regional Director components
 import { RegionalDirectorProgressOversight } from './components/regional-director/RegionalDirectorProgressOversight'
@@ -147,6 +149,8 @@ function App() {
                   <StaffTopbar onToggleSidebar={toggleSidebar} />
                   <div className="content">
                     <Routes>
+                      <Route path="/" element={<DivisionManagerDashboard />} />
+                      <Route path="/work" element={<DivisionManagerDocumentWorks />} />
                       <Route path="/task-assignment" element={<DivisionManagerTaskAssignment />} />
                       <Route path="/review" element={<DivisionManagerReview />} />
                       <Route path="/reports" element={<SectionUnitHeadReports />} />

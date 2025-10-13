@@ -657,6 +657,8 @@ export interface StreamPost {
   POSTED_BY: number;
   SECTION_ID: number;
   ATTACHMENT_LINK?: string;
+  ATTACHMENT_FILE_URL?: string;
+  ATTACHMENT_EXTERNAL_URL?: string;
   CREATED_AT: string;
   AUTHOR_NAME: string;
   AUTHOR_ROLE: string;
@@ -668,10 +670,14 @@ export interface StreamPostCreate {
   message: string;
   sectionId: number;
   attachmentLink?: string;
+  attachmentFileUrl?: string;
+  attachmentExternalUrl?: string;
 }
 
 export interface StreamPostUpdate {
   title?: string;
   message?: string;
   attachmentLink?: string;
+  attachmentFileUrl?: string;
+  attachmentExternalUrl?: string;
 }

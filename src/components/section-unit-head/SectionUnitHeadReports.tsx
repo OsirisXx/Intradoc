@@ -21,8 +21,10 @@ export function SectionUnitHeadReports() {
   // Feedback modal
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
   const [selectedDocument, setSelectedDocument] = useState<Types.DocumentWithDetails | null>(null)
+  const [showReviewModal, setShowReviewModal] = useState(false)
+  const [reviewDoc, setReviewDoc] = useState<Types.DocumentWithDetails | null>(null)
   const [feedbackForm, setFeedbackForm] = useState({
-    type: 'constructive' as 'positive' | 'constructive' | 'action_required' | 'question',
+    type: '' as string,
     content: '',
   })
 
@@ -563,9 +565,7 @@ export function SectionUnitHeadReports() {
 
                 <button 
                   className="btn btn-outline btn-sm"
-                  onClick={() => {
-                    window.location.href = '/section-unit-head/review'
-                  }}
+                  onClick={() => { setReviewDoc(doc); setShowReviewModal(true) }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -631,9 +631,7 @@ export function SectionUnitHeadReports() {
                   )}
                   <button 
                     className="btn btn-outline btn-xs"
-                    onClick={() => {
-                      window.location.href = '/section-unit-head/review'
-                    }}
+                    onClick={() => { setReviewDoc(doc); setShowReviewModal(true) }}
                   >
                     Review
                   </button>
@@ -648,14 +646,9 @@ export function SectionUnitHeadReports() {
       {showFeedbackModal && selectedDocument && (
         <div className="modal-overlay" onClick={() => setShowFeedbackModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
+            <div className="modal-header" style={{ background:'#ffffff', color:'#1e293b', borderBottom:'1px solid #e2e8f0' }}>
               <h3>Write Feedback</h3>
-              <button 
-                className="btn-close"
-                onClick={() => setShowFeedbackModal(false)}
-              >
-                ×
-              </button>
+              <button className="btn-close" onClick={() => setShowFeedbackModal(false)}>×</button>
             </div>
             
             <div className="modal-body">
@@ -668,19 +661,19 @@ export function SectionUnitHeadReports() {
               <form onSubmit={handleWriteFeedback}>
                 <div className="form-group">
                   <label htmlFor="feedback-type">Feedback Type</label>
-                  <select
+                  <input
                     id="feedback-type"
+                    list="feedback-types"
                     value={feedbackForm.type}
-                    onChange={(e) => setFeedbackForm(prev => ({ 
-                      ...prev, 
-                      type: e.target.value as any 
-                    }))}
-                  >
-                    <option value="positive">👍 Positive - Good work, recognition</option>
-                    <option value="constructive">💡 Constructive - Suggestions for improvement</option>
-                    <option value="action_required">⚠️ Action Required - Specific changes needed</option>
-                    <option value="question">❓ Question - Seeking clarification</option>
-                  </select>
+                    onChange={(e) => setFeedbackForm(prev => ({ ...prev, type: e.target.value }))}
+                    placeholder="Type or choose..."
+                  />
+                  <datalist id="feedback-types">
+                    <option value="positive">👍 Positive</option>
+                    <option value="constructive">💡 Constructive</option>
+                    <option value="action_required">⚠️ Action Required</option>
+                    <option value="question">❓ Question</option>
+                  </datalist>
                 </div>
 
                 <div className="form-group">
@@ -711,6 +704,86 @@ export function SectionUnitHeadReports() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReviewModal && reviewDoc && (
+        <div className="modal-overlay" onClick={() => setShowReviewModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="modal-header" style={{ background:'#ffffff', color:'#1e293b', borderBottom:'1px solid #e2e8f0' }}>
+              <h3>Review Document</h3>
+              <button className="btn-close" onClick={() => setShowReviewModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              {/* Title duplicate at top, as per reference */}
+              <h4 style={{ marginTop:0 }}>{reviewDoc.TITLE}</h4>
+              {/* Primary section: Type and File with actions */}
+              {(() => {
+                const fileLink = (reviewDoc as any).FILE_LINK || (reviewDoc as any).DOCUMENT_URL || reviewDoc.FILE_PATH || ''
+                
+                // Extract just the filename from the file link
+                let fileName = ''
+                if (fileLink) {
+                  // Extract filename from file link - handle both absolute paths and URLs
+                  if (fileLink.startsWith('http://') || fileLink.startsWith('https://')) {
+                    // It's a URL
+                    try {
+                      const url = new URL(fileLink)
+                      const pathSegments = url.pathname.split('/').filter(Boolean)
+                      fileName = pathSegments.length > 0 ? decodeURIComponent(pathSegments[pathSegments.length - 1]) : ''
+                    } catch {
+                      fileName = decodeURIComponent((fileLink as string).split('/').pop() || '')
+                    }
+                  } else {
+                    // It's a file path (absolute or relative)
+                    fileName = fileLink.split(/[/\\]/).pop() || fileLink
+                    // Remove any URL encoding if present
+                    try {
+                      fileName = decodeURIComponent(fileName)
+                    } catch {
+                      // If decode fails, use the original
+                    }
+                  }
+                }
+                
+                return (
+                  <div className="feedback-target">
+                    <p style={{ margin:'4px 0' }}><strong>Type:</strong> 📎 File Upload</p>
+                    <p style={{ margin:'4px 0' }}><strong>File:</strong> {fileName || '—'}</p>
+                    {fileLink && (
+                      <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:8 }}>
+                        <a className="btn btn-secondary" href={fileLink as string} download>
+                          Download File
+                        </a>
+                        <a className="btn btn-outline" href={fileLink as string} target="_blank" rel="noopener noreferrer">
+                          Open in New Tab
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              <div className="form-group" style={{ marginTop:16 }}>
+                <label>Submitted by:</label>
+                <div>{reviewDoc.createdByUser?.NAME || (reviewDoc as any).CREATED_BY_NAME || (reviewDoc as any).SUBMITTER_NAME || 'Unknown'}</div>
+              </div>
+              <div className="form-group">
+                <label>Date:</label>
+                <div>{formatDate(reviewDoc.CREATED_AT)}</div>
+              </div>
+              {reviewDoc.DESCRIPTION && (
+                <div className="form-group">
+                  <label>Description</label>
+                  <div style={{whiteSpace:'pre-wrap'}}>{reviewDoc.DESCRIPTION}</div>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowReviewModal(false)}>Close</button>
+              <button className="btn btn-primary" onClick={() => { setSelectedDocument(reviewDoc); setShowFeedbackModal(true); setShowReviewModal(false); }}>Give Feedback</button>
             </div>
           </div>
         </div>

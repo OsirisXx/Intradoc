@@ -961,6 +961,16 @@ class ApiService {
     }
   }
 
+  async uploadPostAttachment(formData: FormData): Promise<any> {
+    try {
+      const response = await apiClient.postFormData('/posts/upload', formData);
+      return response;
+    } catch (error) {
+      console.error('Error uploading post attachment:', error);
+      return { success: false, error: 'Failed to upload attachment' };
+    }
+  }
+
   async updatePost(postId: number, postData: any): Promise<ApiResponse<any>> {
     try {
       const response = await apiClient.put(`/posts/${postId}`, postData);
