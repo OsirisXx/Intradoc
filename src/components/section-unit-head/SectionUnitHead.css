@@ -5796,6 +5796,11 @@ tr:hover {
   display: grid;
   gap: 1rem;
   grid-template-columns: repeat(auto-fill, minmax(600px, 1fr));
+  max-width: 100%;
+}
+
+.section-unit-head-tasks .tasks-grid > * {
+  max-width: 800px;
 }
 
 .section-unit-head-tasks .task-card {

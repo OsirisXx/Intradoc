@@ -671,8 +671,13 @@ exports.downloadDocument = async (req, res) => {
     const userId = req.user.userId;
     const userRole = req.user.role;
 
-    // Get document details
-    const [documents] = await pool.query('SELECT * FROM document WHERE DOCUMENT_ID = ?', [documentId]);
+    // Get document details with creator information
+    const [documents] = await pool.query(`
+      SELECT d.*, u.NAME as CREATOR_NAME 
+      FROM document d
+      LEFT JOIN user u ON d.CREATED_BY = u.USER_ID
+      WHERE d.DOCUMENT_ID = ?
+    `, [documentId]);
     
     if (documents.length === 0) {
       return res.status(404).json({ success: false, error: 'Document not found' });
@@ -725,15 +730,59 @@ exports.downloadDocument = async (req, res) => {
     // Check if file exists
     const filePath = document.FILE_LINK;
     
-    // If it's a URL (external link), redirect to it
+    // If it's a URL (external link), return comprehensive metadata
     if (filePath && (filePath.startsWith('http://') || filePath.startsWith('https://'))) {
-      return res.redirect(filePath);
+      const urlObj = new URL(filePath);
+      
+      // Get task information if this document is linked to a task
+      let taskInfo = null;
+      const [tasks] = await pool.query(
+        `SELECT t.TASK_ID, t.TITLE, t.DUE_DATE, t.PRIORITY, t.STATUS, u.NAME as ASSIGNED_BY_NAME
+         FROM TASK t
+         LEFT JOIN user u ON t.ASSIGNED_BY = u.USER_ID
+         WHERE t.LINKED_DOCUMENT_ID = ?`,
+        [documentId]
+      );
+      if (tasks.length > 0) {
+        taskInfo = tasks[0];
+      }
+
+      // Get creator information
+      const createdBy = document.CREATOR_NAME || 'Unknown';
+
+      res.setHeader('Content-Type', 'application/json');
+      res.json({
+        success: true,
+        isUrl: true,
+        url: filePath,
+        filename: document.TITLE || 'document',
+        contentType: 'url',
+        metadata: {
+          documentId: document.DOCUMENT_ID,
+          title: document.TITLE,
+          description: document.DESCRIPTION,
+          submissionType: 'url',
+          status: 'Submitted', // You might want to get this from document_status table
+          createdBy: createdBy,
+          createdAt: document.CREATED_AT,
+          sha256Hash: document.FINGERPRINT_HASH,
+          taskContext: taskInfo,
+          urlInfo: {
+            url: filePath,
+            domain: urlObj.hostname,
+            title: document.TITLE,
+            description: document.DESCRIPTION
+          }
+        }
+      });
+      return;
     }
     
-    // If it's a local file path, serve the file
+    // If it's a local file path, serve the file with metadata
     if (filePath && fs.existsSync(filePath)) {
       const fileName = path.basename(filePath);
       const fileExtension = path.extname(fileName).toLowerCase();
+      const fileStats = fs.statSync(filePath);
       
       // Set appropriate content type based on file extension
       let contentType = 'application/octet-stream';
@@ -753,6 +802,12 @@ exports.downloadDocument = async (req, res) => {
         case '.xlsx':
           contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
           break;
+        case '.ppt':
+          contentType = 'application/vnd.ms-powerpoint';
+          break;
+        case '.pptx':
+          contentType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+          break;
         case '.txt':
           contentType = 'text/plain';
           break;
@@ -763,10 +818,48 @@ exports.downloadDocument = async (req, res) => {
         case '.png':
           contentType = 'image/png';
           break;
+        case '.gif':
+          contentType = 'image/gif';
+          break;
       }
 
+      // Get task information if this document is linked to a task
+      let taskInfo = null;
+      const [tasks] = await pool.query(
+        `SELECT t.TASK_ID, t.TITLE, t.DUE_DATE, t.PRIORITY, t.STATUS, u.NAME as ASSIGNED_BY_NAME
+         FROM TASK t
+         LEFT JOIN user u ON t.ASSIGNED_BY = u.USER_ID
+         WHERE t.LINKED_DOCUMENT_ID = ?`,
+        [documentId]
+      );
+      if (tasks.length > 0) {
+        taskInfo = tasks[0];
+      }
+
+      // Get creator information
+      const createdBy = document.CREATOR_NAME || 'Unknown';
+
+      const metadata = {
+        documentId: document.DOCUMENT_ID,
+        title: document.TITLE,
+        description: document.DESCRIPTION,
+        submissionType: 'file',
+        status: 'Submitted',
+        createdBy: createdBy,
+        createdAt: document.CREATED_AT,
+        sha256Hash: document.FINGERPRINT_HASH,
+        taskContext: taskInfo,
+        fileInfo: {
+          name: fileName,
+          size: fileStats.size,
+          type: contentType,
+          lastModified: fileStats.mtime.toISOString()
+        }
+      };
+      
       res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+      res.setHeader('X-Document-Metadata', JSON.stringify(metadata));
       
       // Stream the file
       const fileStream = fs.createReadStream(filePath);

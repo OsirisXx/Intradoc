@@ -649,6 +649,7 @@ export function StaffTasks() {
           documentId={selectedDocument.id}
           documentTitle={selectedDocument.title}
           fallbackUrl={selectedDocument.fallbackUrl}
+          taskContext={selectedDocument.task}
         />
       )}
     </div>

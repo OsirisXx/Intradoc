@@ -80,8 +80,32 @@ export function StaffDocumentWorks() {
   }
 
   const handleTaskClick = (task: Types.TaskWithDetails) => {
-    setSelectedTask(task)
-    setShowUploadModal(true)
+    // Check if task already has a linked document
+    if (task.LINKED_DOCUMENT_ID && task.linkedDocument) {
+      // Show the existing submission with metadata
+      setSelectedDocument({
+        id: task.linkedDocument.DOCUMENT_ID || task.LINKED_DOCUMENT_ID,
+        title: task.linkedDocument.TITLE || task.TITLE,
+        fallbackUrl: task.linkedDocument.FILE_LINK,
+        metadata: {
+          documentId: task.linkedDocument.DOCUMENT_ID,
+          title: task.linkedDocument.TITLE,
+          createdBy: task.linkedDocument.CREATED_BY_NAME || 'System User',
+          createdAt: task.linkedDocument.CREATED_AT,
+          submissionType: 'file',
+          sha256Hash: task.linkedDocument.FINGERPRINT_HASH,
+          fileInfo: {
+            name: task.linkedDocument.TITLE,
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          }
+        }
+      })
+      setViewModalOpen(true)
+    } else {
+      // Allow upload
+      setSelectedTask(task)
+      setShowUploadModal(true)
+    }
   }
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -93,7 +117,19 @@ export function StaffDocumentWorks() {
     setSelectedDocument({
       id: document.DOCUMENT_ID,
       title: document.TITLE,
-      fallbackUrl: document.FILE_LINK
+      fallbackUrl: document.FILE_LINK,
+      metadata: {
+        documentId: document.DOCUMENT_ID,
+        title: document.TITLE,
+        createdBy: document.CREATED_BY_NAME || 'System User',
+        createdAt: document.CREATED_AT,
+        submissionType: 'file',
+        sha256Hash: document.FINGERPRINT_HASH,
+        fileInfo: {
+          name: document.TITLE,
+          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        }
+      }
     })
     setViewModalOpen(true)
   }
@@ -427,6 +463,7 @@ export function StaffDocumentWorks() {
           documentId={selectedDocument.id}
           documentTitle={selectedDocument.title}
           fallbackUrl={selectedDocument.fallbackUrl}
+          existingMetadata={selectedDocument.metadata}
         />
       )}
     </div>

@@ -305,7 +305,7 @@ export const notificationUtils = {
   /**
    * Check if notification is stale (older than specified hours)
    */
-  isStale: (notification: Types.TaskNotificationWithDetails[], hours: number = 168): boolean { // 7 days default
+  isStale: (notification: Types.TaskNotificationWithDetails[], hours: number = 168): boolean => { // 7 days default
     return notificationUtils.getAgeInHours(notification[0]) > hours
   },
 

@@ -982,7 +982,16 @@ class ApiService {
   }
 
   // Document download with authentication
-  async downloadDocument(documentId: number): Promise<{ success: boolean; error?: string; blob?: Blob; filename?: string }> {
+  async downloadDocument(documentId: number): Promise<{ 
+    success: boolean; 
+    error?: string; 
+    blob?: Blob; 
+    filename?: string;
+    isUrl?: boolean;
+    url?: string;
+    metadata?: any;
+    contentType?: string;
+  }> {
     try {
       const token = localStorage.getItem('authToken');
       if (!token) {
@@ -1000,9 +1009,30 @@ class ApiService {
         return { success: false, error: errorData.error || 'Download failed' };
       }
 
-      // Get filename from Content-Disposition header
+      // Check if this is a URL response (for external links)
+      const contentType = response.headers.get('Content-Type');
+      if (contentType && contentType.includes('application/json')) {
+        // This is a URL response, not a file
+        const urlData = await response.json();
+        if (urlData.isUrl) {
+          console.log('URL response with metadata:', urlData);
+          return { 
+            success: true, 
+            isUrl: true, 
+            url: urlData.url, 
+            filename: urlData.filename,
+            contentType: 'url',
+            metadata: urlData.metadata
+          };
+        }
+      }
+
+      // Get filename from Content-Disposition header (for file responses)
       const contentDisposition = response.headers.get('Content-Disposition');
+      const metadataHeader = response.headers.get('X-Document-Metadata');
       let filename = 'document';
+      let metadata = null;
+      
       if (contentDisposition) {
         const filenameMatch = contentDisposition.match(/filename="(.+)"/);
         if (filenameMatch) {
@@ -1010,8 +1040,17 @@ class ApiService {
         }
       }
 
+      if (metadataHeader) {
+        try {
+          metadata = JSON.parse(metadataHeader);
+        } catch (e) {
+          console.error('Failed to parse metadata header:', e);
+        }
+      }
+
       const blob = await response.blob();
-      return { success: true, blob, filename };
+      
+      return { success: true, blob, filename, contentType, isUrl: false, metadata };
     } catch (error) {
       console.error('Error downloading document:', error);
       return { success: false, error: 'Failed to download document' };
