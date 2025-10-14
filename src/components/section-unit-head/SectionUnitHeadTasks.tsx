@@ -3,6 +3,7 @@ import { apiService } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { DateTimePicker } from '../common/DateTimePicker';
 import * as Types from '../../types';
+import { taskUtils } from '../../utils/taskUtils';
 import './SectionUnitHead.css';
 
 const SectionUnitHeadTasks: React.FC = () => {
@@ -10,6 +11,8 @@ const SectionUnitHeadTasks: React.FC = () => {
   const [tasks, setTasks] = useState<Types.TaskWithDetails[]>([]);
   const [assignedTasks, setAssignedTasks] = useState<Types.TaskWithDetails[]>([]);
   const [staff, setStaff] = useState<Types.User[]>([]);
+  const [heads, setHeads] = useState<Types.User[]>([]);
+  const isDivisionManager = user?.FUNCTIONAL_ROLE === 'division_manager';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,12 +78,24 @@ const SectionUnitHeadTasks: React.FC = () => {
 
   const loadStaff = async () => {
     try {
-      const response = await apiService.getUsersBySection(user?.SECTION_ID || 0, 'staff');
-      if (response.success) {
-        setStaff(response.data || []);
+      if (isDivisionManager) {
+        const [headsResp, staffResp] = await Promise.all([
+          apiService.getUsersBySection(user?.SECTION_ID || 0, 'section_unit_head'),
+          apiService.getUsersBySection(user?.SECTION_ID || 0, 'staff')
+        ]);
+
+        if (headsResp?.success) setHeads(headsResp.data || []);
+        if (staffResp?.success) setStaff(staffResp.data || []);
+      } else {
+        const response = await apiService.getUsersBySection(user?.SECTION_ID || 0, 'staff');
+        if (response.success) {
+          setStaff(response.data || []);
+        }
+        setHeads([]);
       }
     } catch (err) {
-      console.error('Error loading staff:', err);
+      console.error('Error loading staff/head lists:', err);
+      setHeads([]);
     }
   };
 
@@ -135,7 +150,7 @@ const SectionUnitHeadTasks: React.FC = () => {
       });
 
       // Create notification for assigned user
-      const assignedUser = staff.find(s => s.USER_ID === taskForm.assignedTo);
+      const assignedUser = [...heads, ...staff].find(s => s.USER_ID === taskForm.assignedTo);
       if (assignedUser) {
         await apiService.createNotification({
           userId: taskForm.assignedTo,
@@ -245,6 +260,11 @@ const SectionUnitHeadTasks: React.FC = () => {
     return status !== 'completed' && new Date(dueDate) < new Date()
   };
 
+  // Use the utility function for submission status
+  const getSubmissionStatus = (task: Types.TaskWithDetails) => {
+    return taskUtils.getSubmissionStatus(task);
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
@@ -284,7 +304,10 @@ const SectionUnitHeadTasks: React.FC = () => {
     completed: currentTasks.filter(t => t.STATUS === 'completed').length,
     pending: currentTasks.filter(t => t.STATUS === 'pending').length,
     inProgress: currentTasks.filter(t => t.STATUS === 'in_progress').length,
-    overdue: currentTasks.filter(t => isOverdue(t.DUE_DATE, t.STATUS)).length
+    overdue: currentTasks.filter(t => isOverdue(t.DUE_DATE, t.STATUS)).length,
+    submitted: currentTasks.filter(t => t.LINKED_DOCUMENT_ID).length,
+    submittedOnTime: currentTasks.filter(t => getSubmissionStatus(t) === 'on_time').length,
+    submittedLate: currentTasks.filter(t => getSubmissionStatus(t) === 'late').length
   };
 
   if (loading) {
@@ -361,6 +384,40 @@ const SectionUnitHeadTasks: React.FC = () => {
               <div className="card-label">Overdue</div>
               <div className="card-subtitle">
                 {taskSummary.overdue > 0 ? 'Needs attention' : 'All on track'}
+              </div>
+            </div>
+          </div>
+
+          {/* New Submission Status Cards */}
+          <div className="summary-card submitted">
+            <div className="card-icon">📄</div>
+            <div className="card-content">
+              <div className="card-number">{taskSummary.submitted}</div>
+              <div className="card-label">Submitted</div>
+              <div className="card-subtitle">
+                {taskSummary.submitted > 0 ? `${taskSummary.submittedOnTime} on time, ${taskSummary.submittedLate} late` : 'No submissions yet'}
+              </div>
+            </div>
+          </div>
+          
+          <div className="summary-card submitted-on-time">
+            <div className="card-icon">✅</div>
+            <div className="card-content">
+              <div className="card-number">{taskSummary.submittedOnTime}</div>
+              <div className="card-label">On Time</div>
+              <div className="card-subtitle">
+                {taskSummary.submittedOnTime > 0 ? 'Submitted before due date' : 'No on-time submissions'}
+              </div>
+            </div>
+          </div>
+          
+          <div className="summary-card submitted-late">
+            <div className="card-icon">⏰</div>
+            <div className="card-content">
+              <div className="card-number">{taskSummary.submittedLate}</div>
+              <div className="card-label">Late</div>
+              <div className="card-subtitle">
+                {taskSummary.submittedLate > 0 ? 'Submitted after due date' : 'All submissions on time'}
               </div>
             </div>
           </div>
@@ -472,7 +529,7 @@ const SectionUnitHeadTasks: React.FC = () => {
                     className="filter-select"
                   >
                     <option value="all">All Assignees</option>
-                    {staff.map(member => (
+                    {(isDivisionManager ? [...heads, ...staff] : staff).map(member => (
                       <option key={member.USER_ID} value={member.USER_ID}>
                         {member.NAME}
                       </option>
@@ -591,7 +648,9 @@ const SectionUnitHeadTasks: React.FC = () => {
                         <span className="overdue-badge">OVERDUE</span>
                       )}
                       {task.LINKED_DOCUMENT_ID && (
-                        <span className="submission-indicator">📄 SUBMITTED</span>
+                        <span className={`submission-indicator ${getSubmissionStatus(task) === 'late' ? 'submission-late' : 'submission-on-time'}`}>
+                          📄 {getSubmissionStatus(task) === 'late' ? 'SUBMITTED LATE' : 'SUBMITTED'}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -636,6 +695,9 @@ const SectionUnitHeadTasks: React.FC = () => {
                         <div className="document-meta">
                           <span><strong>Title:</strong> {task.linkedDocument.TITLE}</span>
                           <span><strong>Submitted:</strong> {formatDate(task.linkedDocument.CREATED_AT)}</span>
+                          <span className={`submission-status-indicator ${getSubmissionStatus(task) === 'late' ? 'status-late' : 'status-on-time'}`}>
+                            <strong>Status:</strong> {getSubmissionStatus(task) === 'late' ? 'Submitted Late' : 'Submitted On Time'}
+                          </span>
                           {task.linkedDocument.DESCRIPTION && (
                             <span><strong>Description:</strong> {task.linkedDocument.DESCRIPTION}</span>
                           )}
@@ -738,7 +800,9 @@ const SectionUnitHeadTasks: React.FC = () => {
                     <span className="overdue-badge">OVERDUE</span>
                   )}
                   {task.LINKED_DOCUMENT_ID && (
-                    <span className="submission-indicator">📄 SUBMITTED</span>
+                    <span className={`submission-indicator ${getSubmissionStatus(task) === 'late' ? 'submission-late' : 'submission-on-time'}`}>
+                      📄 {getSubmissionStatus(task) === 'late' ? 'SUBMITTED LATE' : 'SUBMITTED'}
+                    </span>
                   )}
                 </div>
                 <div className="task-list-actions">
@@ -827,12 +891,35 @@ const SectionUnitHeadTasks: React.FC = () => {
                       onChange={(e) => setTaskForm(prev => ({ ...prev, assignedTo: parseInt(e.target.value) }))}
                       required
                     >
-                      <option value={0}>Select staff member...</option>
-                      {staff.map(member => (
-                        <option key={member.USER_ID} value={member.USER_ID}>
-                          {member.NAME} ({member.ORGANIZATIONAL_ASSIGNMENT})
-                        </option>
-                      ))}
+                      <option value={0}>{isDivisionManager ? 'Select member...' : 'Select staff member...'}</option>
+                      {isDivisionManager ? (
+                        <>
+                          {heads.length > 0 && (
+                            <optgroup label="Section/Unit Heads">
+                              {heads.map(member => (
+                                <option key={`head-${member.USER_ID}`} value={member.USER_ID}>
+                                  {member.NAME} ({member.ORGANIZATIONAL_ASSIGNMENT || 'Section/Unit Head'})
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {staff.length > 0 && (
+                            <optgroup label="Staff">
+                              {staff.map(member => (
+                                <option key={`staff-${member.USER_ID}`} value={member.USER_ID}>
+                                  {member.NAME} ({member.ORGANIZATIONAL_ASSIGNMENT || 'Staff'})
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </>
+                      ) : (
+                        staff.map(member => (
+                          <option key={member.USER_ID} value={member.USER_ID}>
+                            {member.NAME} ({member.ORGANIZATIONAL_ASSIGNMENT})
+                          </option>
+                        ))
+                      )}
                     </select>
                   </div>
 

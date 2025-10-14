@@ -45,6 +45,7 @@ import { DivisionManagerTaskAssignment } from './components/division-manager/Div
 import { DivisionManagerSendToRegional } from './components/division-manager/DivisionManagerSendToRegional'
 import { DivisionManagerDashboard } from './components/division-manager/DivisionManagerDashboard'
 import { DivisionManagerDocumentWorks } from './components/division-manager/DivisionManagerDocumentWorks'
+import { DivisionManagerPosts } from './components/division-manager/DivisionManagerPosts'
 import DivisionManagerFeedback from './components/division-manager/DivisionManagerFeedback'
 import DivisionManagerNotifications from './components/division-manager/DivisionManagerNotifications'
 
@@ -152,6 +153,7 @@ function App() {
                       <Route path="/work" element={<DivisionManagerDocumentWorks />} />
                       <Route path="/task-assignment" element={<DivisionManagerTaskAssignment />} />
                       <Route path="/reports" element={<SectionUnitHeadReports />} />
+                      <Route path="/posts" element={<DivisionManagerPosts />} />
                       <Route path="/send-to-regional" element={<DivisionManagerSendToRegional />} />
                       <Route path="/tasks" element={<div className="page"><h1>Tasks</h1><p>Coming soon...</p></div>} />
                       <Route path="/notifications" element={<DivisionManagerNotifications />} />
@@ -172,6 +174,7 @@ function App() {
                   <StaffTopbar onToggleSidebar={toggleSidebar} />
                   <div className="content">
                     <Routes>
+                      <Route path="/" element={<DivisionManagerDashboard />} />
                       <Route path="/review" element={<RegionalDirectorReview />} />
                       <Route path="/progress-oversight" element={<RegionalDirectorProgressOversight />} />
                     </Routes>

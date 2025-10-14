@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { apiService } from '../../services/api'
 import * as Types from '../../types'
+import { taskUtils } from '../../utils/taskUtils'
 import '../section-unit-head/SectionUnitHead.css'
 
 export function DivisionManagerDocumentWorks() {
@@ -138,6 +139,11 @@ export function DivisionManagerDocumentWorks() {
     return new Date(dueDate) < new Date()
   }
 
+  // Get submission status for a task
+  const getSubmissionStatus = (task: Types.TaskWithDetails) => {
+    return taskUtils.getSubmissionStatus(task);
+  };
+
   return (
     <div className="document-works-page">
       <div className="page-header">
@@ -178,6 +184,25 @@ export function DivisionManagerDocumentWorks() {
                   <div className="task-content">
                     <div className="task-title">{task.TITLE}</div>
                     <div className="task-subtitle">{task.DESCRIPTION}</div>
+                    {/* Submission Status Badge */}
+                    {task.LINKED_DOCUMENT_ID && (
+                      <div className="task-submission-status" style={{
+                        marginTop: '4px',
+                        display: 'inline-block'
+                      }}>
+                        <span style={{
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontSize: '10px',
+                          fontWeight: '600',
+                          backgroundColor: getSubmissionStatus(task) === 'late' ? '#fee2e2' : '#dcfce7',
+                          color: getSubmissionStatus(task) === 'late' ? '#991b1b' : '#166534',
+                          border: `1px solid ${getSubmissionStatus(task) === 'late' ? '#fecaca' : '#bbf7d0'}`
+                        }}>
+                          📄 {getSubmissionStatus(task) === 'late' ? 'SUBMITTED LATE' : 'SUBMITTED'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="task-date" style={{
                     color: isOverdue(task.DUE_DATE) ? '#dc2626' : '#019831'
@@ -205,6 +230,7 @@ export function DivisionManagerDocumentWorks() {
                   <tr>
                     <th>TASK TITLE</th>
                     <th>STATUS</th>
+                    <th>SUBMISSION</th>
                     <th>ASSIGNED TO</th>
                     <th>DUE DATE</th>
                   </tr>
@@ -214,6 +240,33 @@ export function DivisionManagerDocumentWorks() {
                     <tr key={task.TASK_ID}>
                       <td>{task.TITLE}</td>
                       <td>{getTaskStatusBadge(task.STATUS)}</td>
+                      <td>
+                        {task.LINKED_DOCUMENT_ID ? (
+                          <span style={{
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            fontWeight: '600',
+                            backgroundColor: getSubmissionStatus(task) === 'late' ? '#fee2e2' : '#dcfce7',
+                            color: getSubmissionStatus(task) === 'late' ? '#991b1b' : '#166534',
+                            border: `1px solid ${getSubmissionStatus(task) === 'late' ? '#fecaca' : '#bbf7d0'}`
+                          }}>
+                            {getSubmissionStatus(task) === 'late' ? 'SUBMITTED LATE' : 'SUBMITTED'}
+                          </span>
+                        ) : (
+                          <span style={{
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            fontWeight: '600',
+                            backgroundColor: '#f3f4f6',
+                            color: '#6b7280',
+                            border: '1px solid #d1d5db'
+                          }}>
+                            NOT SUBMITTED
+                          </span>
+                        )}
+                      </td>
                       <td>{task.ASSIGNED_TO_NAME || `User #${task.ASSIGNED_TO}` || 'Unknown'}</td>
                       <td>{formatDate(task.DUE_DATE)}</td>
                     </tr>
@@ -301,5 +354,6 @@ export function DivisionManagerDocumentWorks() {
     </div>
   )
 }
+
 
 

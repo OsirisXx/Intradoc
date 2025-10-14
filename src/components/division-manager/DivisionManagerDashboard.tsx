@@ -6,6 +6,7 @@ import '../section-unit-head/SectionUnitHead.css'
 
 export function DivisionManagerDashboard() {
   const { user } = useAuth()
+  const isRegionalDirector = user?.FUNCTIONAL_ROLE === 'regional_director'
   const [documents, setDocuments] = useState<any[]>([])
   const [notifications, setNotifications] = useState<Types.TaskNotificationWithDetails[]>([])
   const [tasks, setTasks] = useState<any[]>([])
@@ -39,10 +40,10 @@ export function DivisionManagerDashboard() {
       ])
 
       if (documentsRes.success) {
-        const staffDocuments = documentsRes.data?.filter((doc: any) => 
-          doc.CREATED_BY_ROLE === 'staff'
+        const allowedDocuments = documentsRes.data?.filter((doc: any) => 
+          doc.CREATED_BY_ROLE === 'staff' || doc.CREATED_BY_ROLE === 'section_unit_head'
         ) || []
-        setDocuments(staffDocuments.slice(0, 10))
+        setDocuments(allowedDocuments.slice(0, 10))
       }
 
       if (notificationsRes.success) {
@@ -121,43 +122,7 @@ export function DivisionManagerDashboard() {
     }
   }
 
-  const getPriorityBadge = (priority: string) => {
-    switch (priority) {
-      case 'urgent':
-        return <span className="priority-badge urgent">URGENT</span>
-      case 'high':
-        return <span className="priority-badge high">HIGH</span>
-      case 'medium':
-        return <span className="priority-badge medium">MEDIUM</span>
-      case 'low':
-        return <span className="priority-badge low">LOW</span>
-      default:
-        return <span className="priority-badge medium">{priority.toUpperCase()}</span>
-    }
-  }
-
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
-      case 'task_assigned':
-        return '📋'
-      case 'task_completed':
-        return '✅'
-      case 'document_approved':
-        return '📄'
-      case 'document_rejected':
-        return '❌'
-      case 'revision_required':
-        return '🔄'
-      case 'feedback_received':
-        return '💬'
-      case 'deadline_approaching':
-        return '⏰'
-      case 'deadline_overdue':
-        return '🚨'
-      default:
-        return '🔔'
-    }
-  }
+  
 
   const getAttachmentInfo = (link: string) => {
     const href = link.startsWith('http') ? link : `http://localhost:3001${link}`
@@ -259,14 +224,16 @@ export function DivisionManagerDashboard() {
             </div>
           </div>
           
-          <div className="stat-card my-tasks">
-            <div className="stat-icon">✅</div>
-            <div className="stat-content">
-              <div className="stat-number">{stats.myTasks}</div>
-              <div className="stat-label">My Tasks</div>
-              <div className="stat-subtitle">Assigned to you</div>
+          {!isRegionalDirector && (
+            <div className="stat-card my-tasks">
+              <div className="stat-icon">✅</div>
+              <div className="stat-content">
+                <div className="stat-number">{stats.myTasks}</div>
+                <div className="stat-label">My Tasks</div>
+                <div className="stat-subtitle">Assigned to you</div>
+              </div>
             </div>
-          </div>
+          )}
           
           <div className="stat-card completion">
             <div className="stat-icon">📊</div>
@@ -293,7 +260,7 @@ export function DivisionManagerDashboard() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div className="document-status-section">
               <div className="section-title-bar">
-                <h2>RECENT DOCUMENTS FROM STAFF</h2>
+                <h2>Recent uploaded documents</h2>
               </div>
               <div className="document-status-content" style={{ padding: '20px' }}>
                 {loading ? (
@@ -325,39 +292,41 @@ export function DivisionManagerDashboard() {
               </div>
             </div>
 
-            <div className="document-status-section">
-              <div className="section-title-bar">
-                <h2>MY TASKS</h2>
-              </div>
-              <div className="document-status-content" style={{ padding: '20px' }}>
-                {loading ? (
-                  <div className="empty-state" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Loading...</div>
-                ) : tasks.length === 0 ? (
-                  <div className="empty-state" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>No tasks assigned to you</div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {tasks.map(task => (
-                      <div key={task.TASK_ID} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', transition: 'all 0.2s ease' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#cbd5e1' }}
-                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.borderColor = '#e2e8f0' }}
-                      >
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: '600', fontSize: '14px', color: '#1e293b', marginBottom: '4px', lineHeight: '1.4' }}>{task.TITLE}</div>
-                          <div style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <span>Due: {formatDate(task.DUE_DATE)}</span>
-                            <span style={{ color: '#cbd5e1' }}>•</span>
-                            <span>By {task.assignedBy?.NAME}</span>
+            {!isRegionalDirector && (
+              <div className="document-status-section">
+                <div className="section-title-bar">
+                  <h2>MY TASKS</h2>
+                </div>
+                <div className="document-status-content" style={{ padding: '20px' }}>
+                  {loading ? (
+                    <div className="empty-state" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Loading...</div>
+                  ) : tasks.length === 0 ? (
+                    <div className="empty-state" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>No tasks assigned to you</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {tasks.map(task => (
+                        <div key={task.TASK_ID} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', transition: 'all 0.2s ease' }}
+                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.borderColor = '#cbd5e1' }}
+                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.borderColor = '#e2e8f0' }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: '600', fontSize: '14px', color: '#1e293b', marginBottom: '4px', lineHeight: '1.4' }}>{task.TITLE}</div>
+                            <div style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span>Due: {formatDate(task.DUE_DATE)}</span>
+                              <span style={{ color: '#cbd5e1' }}>•</span>
+                              <span>By {task.assignedBy?.NAME}</span>
+                            </div>
+                          </div>
+                          <div style={{ marginLeft: '16px', flexShrink: 0 }}>
+                            {getTaskStatusBadge(task.STATUS)}
                           </div>
                         </div>
-                        <div style={{ marginLeft: '16px', flexShrink: 0 }}>
-                          {getTaskStatusBadge(task.STATUS)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className="stream-posts-section" style={{ height: 'fit-content', minHeight: '600px' }}>
@@ -415,6 +384,7 @@ export function DivisionManagerDashboard() {
       </div>
       </div>
       <div className="dashboard-grid-modern">
+        {!isRegionalDirector && (
         <div className="dashboard-card-modern">
           <div className="card-header">
             <div className="card-title">
@@ -422,7 +392,7 @@ export function DivisionManagerDashboard() {
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                 <polyline points="14,2 14,8 20,8"/>
               </svg>
-              Recent Documents from Staff
+              Recent uploaded documents
             </div>
             <button 
               className="btn btn-outline btn-sm"
@@ -457,134 +427,9 @@ export function DivisionManagerDashboard() {
             )}
           </div>
         </div>
+        )}
 
-        <div className="dashboard-card-modern">
-          <div className="card-header">
-            <div className="card-title">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-              </svg>
-              Recent Announcements
-            </div>
-            <button 
-              className="btn btn-outline btn-sm"
-              onClick={() => window.location.href = '/division-manager/notifications'}
-            >
-              View All
-            </button>
-          </div>
-          <div className="card-content">
-            {notifications.length === 0 ? (
-              <div className="empty-state">
-                <p>No recent announcements</p>
-              </div>
-            ) : (
-              <div className="announcements-list">
-                {notifications.map(notification => (
-                  <div key={notification.NOTIFICATION_ID} className="announcement-item">
-                    <div className="announcement-icon">
-                      {getNotificationIcon(notification.TYPE)}
-                    </div>
-                    <div className="announcement-content">
-                      <div className="announcement-title">{notification.TITLE}</div>
-                      <div className="announcement-meta">
-                        <span>{formatDate(notification.CREATED_AT)}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="dashboard-card-modern">
-          <div className="card-header">
-            <div className="card-title">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4"/>
-                <path d="M13 7H7l4-4 4 4z"/>
-              </svg>
-              My Tasks
-            </div>
-            <button 
-              className="btn btn-outline btn-sm"
-              onClick={() => window.location.href = '/division-manager/tasks'}
-            >
-              View All
-            </button>
-          </div>
-          <div className="card-content">
-            {tasks.length === 0 ? (
-              <div className="empty-state">
-                <p>No tasks assigned to you</p>
-              </div>
-            ) : (
-              <div className="tasks-list">
-                {tasks.map(task => (
-                  <div key={task.TASK_ID} className="task-item">
-                    <div className="task-info">
-                      <div className="task-title">{task.TITLE}</div>
-                      <div className="task-meta">
-                        <span>Due: {formatDate(task.DUE_DATE)}</span>
-                        <span>•</span>
-                        <span>By {task.assignedBy?.NAME}</span>
-                      </div>
-                    </div>
-                    <div className="task-badges">
-                      {getTaskStatusBadge(task.STATUS)}
-                      {getPriorityBadge(task.PRIORITY)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="dashboard-card-modern">
-          <div className="card-header">
-            <div className="card-title">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                <path d="M9 10h6"/>
-                <path d="M9 14h3"/>
-              </svg>
-              Recent Stream Posts
-            </div>
-            <button 
-              className="btn btn-outline btn-sm"
-              onClick={() => window.location.href = '/division-manager/posts'}
-            >
-              View All
-            </button>
-          </div>
-          <div className="card-content">
-            {streamPosts.length === 0 ? (
-              <div className="empty-state">
-                <p>No recent posts</p>
-              </div>
-            ) : (
-              <div className="stream-list">
-                {streamPosts.map(post => (
-                  <div key={post.POST_ID} className="stream-item">
-                    <div className="stream-avatar">
-                      <span>{post.author?.NAME?.charAt(0) || '?'}</span>
-                    </div>
-                    <div className="stream-content">
-                      <div className="stream-author">{post.author?.NAME}</div>
-                      <div className="stream-text">{post.CONTENT}</div>
-                      <div className="stream-meta">
-                        <span>{formatDate(post.CREATED_AT)}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        
       </div>
 
       <div className="quick-actions-modern">
@@ -637,17 +482,19 @@ export function DivisionManagerDashboard() {
             <div className="action-badge">{stats.pendingReviews}</div>
           </button>
           
-          <button 
-            className="action-card-modern"
-            onClick={() => window.location.href = '/division-manager/tasks'}
-          >
-            <div className="action-icon-large">✅</div>
-            <div className="action-content">
-              <div className="action-title">My Tasks</div>
-              <div className="action-description">View assignments</div>
-            </div>
-            <div className="action-badge">{stats.myTasks}</div>
-          </button>
+          {!isRegionalDirector && (
+            <button 
+              className="action-card-modern"
+              onClick={() => window.location.href = '/division-manager/tasks'}
+            >
+              <div className="action-icon-large">✅</div>
+              <div className="action-content">
+                <div className="action-title">My Tasks</div>
+                <div className="action-description">View assignments</div>
+              </div>
+              <div className="action-badge">{stats.myTasks}</div>
+            </button>
+          )}
           
           <button 
             className="action-card-modern"

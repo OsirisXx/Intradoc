@@ -26,31 +26,41 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   const [dateValue, setDateValue] = useState('');
   const [timeValue, setTimeValue] = useState('');
 
-  // Parse the datetime value when component mounts or value changes
+  // Parse the datetime value when component mounts or value changes (avoid timezone conversions)
   useEffect(() => {
     if (value) {
-      const dateTime = new Date(value);
-      const date = dateTime.toISOString().split('T')[0];
-      const time = dateTime.toTimeString().slice(0, 5);
-      setDateValue(date);
-      setTimeValue(time);
+      const isoMatch = value.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+      if (isoMatch) {
+        const nextDate = isoMatch[1];
+        const nextTime = isoMatch[2];
+        if (nextDate !== dateValue) setDateValue(nextDate);
+        if (nextTime !== timeValue) setTimeValue(nextTime);
+      } else {
+        // Fallback parsing if value is a full Date string
+        const parsed = new Date(value);
+        if (!isNaN(parsed.getTime())) {
+          const nextDate = parsed.toISOString().split('T')[0];
+          const nextTime = parsed.toTimeString().slice(0, 5);
+          if (nextDate !== dateValue) setDateValue(nextDate);
+          if (nextTime !== timeValue) setTimeValue(nextTime);
+        }
+      }
     } else {
       setDateValue('');
       setTimeValue('');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
-  // Combine date and time when either changes
+  // Combine date and time when either changes, only emit if different from current value
   useEffect(() => {
-    if (dateValue && timeValue) {
-      const combinedDateTime = `${dateValue}T${timeValue}`;
-      onChange(combinedDateTime);
-    } else if (dateValue && !timeValue) {
-      // If only date is set, default to 09:00 AM
-      const combinedDateTime = `${dateValue}T09:00`;
+    if (!dateValue && !timeValue) return;
+    const combinedDateTime = `${dateValue || ''}T${timeValue || '09:00'}`.trim();
+    if (combinedDateTime !== value) {
       onChange(combinedDateTime);
     }
-  }, [dateValue, timeValue]); // Remove onChange from dependencies to prevent infinite loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateValue, timeValue]);
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setDateValue(e.target.value);
@@ -60,8 +70,8 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
     setTimeValue(e.target.value);
   };
 
-  // Get minimum date (today) if not provided
-  const minDate = min || new Date().toISOString().split('T')[0];
+  // Get minimum date (today) if not provided. If a datetime string is passed, extract the date portion
+  const minDate = (min && min.includes('T') ? min.split('T')[0] : min) || new Date().toISOString().split('T')[0];
 
   return (
     <div className={`datetime-picker-container ${className}`}>
@@ -109,6 +119,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
             onChange={handleTimeChange}
             className="time-input"
             placeholder="Select time"
+            step={60}
           />
         </div>
       </div>
