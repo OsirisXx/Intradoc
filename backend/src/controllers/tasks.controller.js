@@ -341,8 +341,20 @@ exports.completeTask = async (req, res) => {
     const { taskId } = req.params;
     const userId = req.user.userId;
 
+    // Ensure the task exists and belongs to user
+    const [tasks] = await pool.query('SELECT * FROM TASK WHERE TASK_ID = ? AND ASSIGNED_TO = ?', [taskId, userId]);
+    if (tasks.length === 0) {
+      return res.status(403).json({ success: false, error: 'You can only update tasks assigned to you' });
+    }
+
+    // Optional: ensure there is at least one attachment
+    const [docs] = await pool.query('SELECT COUNT(1) as cnt FROM document WHERE ASSIGNED_TO = ?', [taskId]);
+    if (docs[0]?.cnt === 0) {
+      return res.status(400).json({ success: false, error: 'At least one attachment is required to complete the task' });
+    }
+
     await pool.query(
-      'UPDATE document_requirement SET STATUS = "completed", COMPLETED_AT = NOW() WHERE REQUIREMENT_ID = ? AND ASSIGNED_TO = ?',
+      'UPDATE TASK SET STATUS = "completed", COMPLETED_AT = NOW(), UPDATED_AT = NOW() WHERE TASK_ID = ? AND ASSIGNED_TO = ?',
       [taskId, userId]
     );
 
@@ -353,6 +365,50 @@ exports.completeTask = async (req, res) => {
   } catch (error) {
     console.error('Complete task error:', error);
     res.status(500).json({ success: false, error: 'Failed to complete task' });
+  }
+};
+
+// Submit task (lock attachments)
+exports.submitTask = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const userId = req.user.userId;
+
+    // Ensure the task exists and belongs to user
+    const [tasks] = await pool.query('SELECT * FROM TASK WHERE TASK_ID = ? AND ASSIGNED_TO = ?', [taskId, userId]);
+    if (tasks.length === 0) {
+      return res.status(403).json({ success: false, error: 'You can only submit tasks assigned to you' });
+    }
+
+    // Allow submission even without attachments (for "Mark as Done" functionality)
+
+    await pool.query('UPDATE TASK SET STATUS = "submitted", UPDATED_AT = NOW() WHERE TASK_ID = ? AND ASSIGNED_TO = ?', [taskId, userId]);
+
+    res.json({ success: true, message: 'Task submitted' });
+  } catch (error) {
+    console.error('Submit task error:', error);
+    res.status(500).json({ success: false, error: 'Failed to submit task' });
+  }
+};
+
+// Unsubmit task (unlock attachments)
+exports.unsubmitTask = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const userId = req.user.userId;
+
+    // Ensure the task exists and belongs to user
+    const [tasks] = await pool.query('SELECT * FROM TASK WHERE TASK_ID = ? AND ASSIGNED_TO = ?', [taskId, userId]);
+    if (tasks.length === 0) {
+      return res.status(403).json({ success: false, error: 'You can only unsubmit tasks assigned to you' });
+    }
+
+    await pool.query('UPDATE TASK SET STATUS = "in_progress", UPDATED_AT = NOW() WHERE TASK_ID = ? AND ASSIGNED_TO = ?', [taskId, userId]);
+
+    res.json({ success: true, message: 'Task unsubmitted' });
+  } catch (error) {
+    console.error('Unsubmit task error:', error);
+    res.status(500).json({ success: false, error: 'Failed to unsubmit task' });
   }
 };
 

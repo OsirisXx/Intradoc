@@ -12,6 +12,9 @@ router.get('/assigned-to/:userId', tasksController.getTasksAssignedTo);
 router.get('/assigned-by/:userId', tasksController.getTasksAssignedBy);
 router.put('/:taskId/status', tasksController.updateTaskStatus);
 router.put('/:taskId/complete', tasksController.completeTask);
+// Submission workflow
+router.put('/:taskId/submit', tasksController.submitTask);
+router.put('/:taskId/unsubmit', tasksController.unsubmitTask);
 router.delete('/:taskId', tasksController.deleteTask);
 
 // Special queries

@@ -10,6 +10,8 @@ router.use(authenticate);
 router.get('/', documentsController.getDocuments);
 router.get('/section/:sectionId', documentsController.getDocumentsBySection);
 router.post('/upload', documentsController.uploadDocument);
+// Allow deletion with guard rules in controller
+router.delete('/:documentId', documentsController.deleteDocument);
 
 // Document approval workflow
 router.get('/pending-review', documentsController.getPendingReview);

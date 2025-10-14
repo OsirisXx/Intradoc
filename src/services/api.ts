@@ -219,6 +219,34 @@ class ApiService {
     }
   }
 
+  async uploadDocumentWithFile(data: {
+    file: File;
+    title: string;
+    description: string;
+    category?: string;
+    tags?: string;
+    uploadedBy: number;
+    sectionId: number;
+    fulfillsTaskId?: number;
+  }): Promise<ApiResponse<Document>> {
+    try {
+      const formData = new FormData();
+      formData.append('file', data.file);
+      formData.append('title', data.title);
+      formData.append('description', data.description || '');
+      formData.append('category', data.category || '');
+      formData.append('tags', data.tags || '');
+      formData.append('uploadedBy', data.uploadedBy.toString());
+      formData.append('sectionId', data.sectionId.toString());
+      if (data.fulfillsTaskId) formData.append('fulfillsTaskId', data.fulfillsTaskId.toString());
+      const response = await apiClient.postFormData('/documents/upload', formData);
+      return response;
+    } catch (error) {
+      console.error('Error uploading document with file:', error);
+      return { success: false, error: 'Failed to upload document file' };
+    }
+  }
+
   async getCategories(): Promise<ApiResponse<DocumentCategory[]>> {
     return new Promise((resolve) => {
       setTimeout(() => {
@@ -310,13 +338,15 @@ class ApiService {
   }
 
   async completeTask(taskId: number): Promise<ApiResponse<void>> {
-    try {
-      const response = await apiClient.put(`/tasks/${taskId}/status`, { status: 'completed' });
-      return response;
-    } catch (error) {
-      console.error('Error completing task:', error);
-      return { success: false, error: 'Failed to complete task' };
-    }
+    try { return await apiClient.put(`/tasks/${taskId}/complete`, {}); } catch (error) { console.error('Error completing task:', error); return { success: false, error: 'Failed to complete task' }; }
+  }
+
+  async submitTask(taskId: number): Promise<ApiResponse<void>> {
+    try { return await apiClient.put(`/tasks/${taskId}/submit`, {}); } catch (error) { console.error('Error submitting task:', error); return { success: false, error: 'Failed to submit task' }; }
+  }
+
+  async unsubmitTask(taskId: number): Promise<ApiResponse<void>> {
+    try { return await apiClient.put(`/tasks/${taskId}/unsubmit`, {}); } catch (error) { console.error('Error unsubmitting task:', error); return { success: false, error: 'Failed to unsubmit task' }; }
   }
 
   async getDocumentsBySection(sectionId: number): Promise<ApiResponse<DocumentWithDetails[]>> {
@@ -397,6 +427,16 @@ class ApiService {
     } catch (error) {
       console.error('Error fetching task documents:', error);
       return { success: false, error: 'Failed to fetch task documents' };
+    }
+  }
+
+  async deleteDocument(documentId: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.delete(`/documents/${documentId}`);
+      return response;
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      return { success: false, error: 'Failed to delete document' };
     }
   }
 

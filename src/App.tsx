@@ -9,6 +9,7 @@ import { StaffTopbar } from './components/staff/StaffTopbar'
 import { StaffSidebar } from './components/staff/StaffSidebar'
 import { StaffDashboard } from './components/staff/StaffDashboard'
 import { StaffDocumentWorks } from './components/staff/StaffDocumentWorks'
+import { StaffTaskDetail } from './components/staff/StaffTaskDetail'
 import { StaffTasks } from './components/staff/StaffTasks'
 import { StaffNotifications } from './components/staff/StaffNotifications'
 import { StaffFeedback } from './components/staff/StaffFeedback'
@@ -106,6 +107,7 @@ function App() {
                     <Routes>
                       <Route path="/" element={<StaffDashboard />} />
                       <Route path="/work" element={<StaffDocumentWorks />} />
+                      <Route path="/work/:taskId" element={<StaffTaskDetail />} />
                       <Route path="/tasks" element={<StaffTasks />} />
                       <Route path="/notifications" element={<StaffNotifications />} />
                       <Route path="/feedback" element={<StaffFeedback />} />

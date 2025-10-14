@@ -130,11 +130,10 @@ exports.uploadDocument = [upload.single('file'), async (req, res) => {
 
     // Update task status if linked to task
     if (fulfillsTaskId) {
-      // Update the task's LINKED_DOCUMENT_ID to create bidirectional link
-      await pool.query(
-        'UPDATE TASK SET LINKED_DOCUMENT_ID = ?, STATUS = "in_progress", UPDATED_AT = NOW() WHERE TASK_ID = ?',
-        [result.insertId, fulfillsTaskId]
-      );
+      // Link this document to the task as an attachment (store taskId in ASSIGNED_TO)
+      await pool.query('UPDATE document SET ASSIGNED_TO = ? WHERE DOCUMENT_ID = ?', [fulfillsTaskId, result.insertId]);
+      // Keep task in in_progress on first upload; don't overwrite submitted/completed
+      await pool.query('UPDATE TASK SET STATUS = CASE WHEN STATUS IN ("pending") THEN "in_progress" ELSE STATUS END, UPDATED_AT = NOW() WHERE TASK_ID = ?', [fulfillsTaskId]);
       console.log(`Document ${result.insertId} linked to task ID: ${fulfillsTaskId}`);
     }
 
@@ -154,6 +153,52 @@ exports.uploadDocument = [upload.single('file'), async (req, res) => {
 
 // Export multer upload middleware for use in routes
 exports.upload = upload;
+
+// Delete a document with task lock rules
+exports.deleteDocument = async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const userId = req.user.userId;
+
+    const [docs] = await pool.query('SELECT * FROM document WHERE DOCUMENT_ID = ?', [documentId]);
+    if (docs.length === 0) {
+      return res.status(404).json({ success: false, error: 'Document not found' });
+    }
+    const doc = docs[0];
+
+    // Only creator can delete
+    if (doc.CREATED_BY !== userId) {
+      return res.status(403).json({ success: false, error: 'You can only delete your own document' });
+    }
+
+    // If linked to a task via ASSIGNED_TO, ensure task is not submitted
+    if (doc.ASSIGNED_TO) {
+      const [tasks] = await pool.query('SELECT STATUS FROM TASK WHERE TASK_ID = ?', [doc.ASSIGNED_TO]);
+      if (tasks.length > 0 && tasks[0].STATUS === 'submitted') {
+        return res.status(400).json({ success: false, error: 'Cannot delete attachment while task is submitted. Unsubmit first.' });
+      }
+    }
+
+    // Remove file from disk if local
+    if (doc.FILE_LINK && !(doc.FILE_LINK.startsWith('http://') || doc.FILE_LINK.startsWith('https://'))) {
+      try {
+        if (fs.existsSync(doc.FILE_LINK)) {
+          fs.unlinkSync(doc.FILE_LINK);
+        }
+      } catch (e) {
+        console.warn('Failed to remove file from disk:', e.message);
+      }
+    }
+
+    await pool.query('DELETE FROM document WHERE DOCUMENT_ID = ?', [documentId]);
+    await pool.query('DELETE FROM document_status WHERE DOCUMENT_ID = ?', [documentId]);
+
+    res.json({ success: true, message: 'Document deleted' });
+  } catch (error) {
+    console.error('Delete document error:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete document' });
+  }
+};
 
 // Get documents pending review (role-based)
 exports.getPendingReview = async (req, res) => {
