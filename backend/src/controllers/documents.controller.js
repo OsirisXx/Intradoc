@@ -663,3 +663,214 @@ exports.getDocumentsBySection = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+// Download document
+exports.downloadDocument = async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const userId = req.user.userId;
+    const userRole = req.user.role;
+
+    // Get document details with creator information
+    const [documents] = await pool.query(`
+      SELECT d.*, u.NAME as CREATOR_NAME 
+      FROM document d
+      LEFT JOIN user u ON d.CREATED_BY = u.USER_ID
+      WHERE d.DOCUMENT_ID = ?
+    `, [documentId]);
+    
+    if (documents.length === 0) {
+      return res.status(404).json({ success: false, error: 'Document not found' });
+    }
+
+    const document = documents[0];
+
+    // Check if user has permission to view this document
+    let hasPermission = false;
+    
+    if (userRole === 'admin') {
+      hasPermission = true; // Admin can view all documents
+    } else if (userRole === 'staff' && document.CREATED_BY === userId) {
+      hasPermission = true; // Staff can view their own documents
+    } else if (userRole === 'section_unit_head' || userRole === 'division_manager' || userRole === 'regional_director') {
+      // Check if user's section has access to this document
+      const [userSections] = await pool.query(
+        'SELECT SECTION_ID FROM user WHERE USER_ID = ?', 
+        [userId]
+      );
+      
+      if (userSections.length > 0) {
+        const userSectionId = userSections[0].SECTION_ID;
+        
+        // For division managers and regional directors, check division/region access
+        if (userRole === 'division_manager') {
+          const [divisionAccess] = await pool.query(`
+            SELECT 1 FROM section s1
+            JOIN section s2 ON s1.DIVISION_ID = s2.DIVISION_ID
+            WHERE s1.SECTION_ID = ? AND s2.SECTION_ID = ?
+          `, [userSectionId, document.SECTION_ID]);
+          
+          if (divisionAccess.length > 0) {
+            hasPermission = true;
+          }
+        } else if (userRole === 'regional_director') {
+          // Regional directors can view all documents
+          hasPermission = true;
+        } else {
+          // Section unit heads can view documents from their section
+          hasPermission = document.SECTION_ID === userSectionId;
+        }
+      }
+    }
+
+    if (!hasPermission) {
+      return res.status(403).json({ success: false, error: 'You do not have permission to view this document' });
+    }
+
+    // Check if file exists
+    const filePath = document.FILE_LINK;
+    
+    // If it's a URL (external link), return comprehensive metadata
+    if (filePath && (filePath.startsWith('http://') || filePath.startsWith('https://'))) {
+      const urlObj = new URL(filePath);
+      
+      // Get task information if this document is linked to a task
+      let taskInfo = null;
+      const [tasks] = await pool.query(
+        `SELECT t.TASK_ID, t.TITLE, t.DUE_DATE, t.PRIORITY, t.STATUS, u.NAME as ASSIGNED_BY_NAME
+         FROM TASK t
+         LEFT JOIN user u ON t.ASSIGNED_BY = u.USER_ID
+         WHERE t.LINKED_DOCUMENT_ID = ?`,
+        [documentId]
+      );
+      if (tasks.length > 0) {
+        taskInfo = tasks[0];
+      }
+
+      // Get creator information
+      const createdBy = document.CREATOR_NAME || 'Unknown';
+
+      res.setHeader('Content-Type', 'application/json');
+      res.json({
+        success: true,
+        isUrl: true,
+        url: filePath,
+        filename: document.TITLE || 'document',
+        contentType: 'url',
+        metadata: {
+          documentId: document.DOCUMENT_ID,
+          title: document.TITLE,
+          description: document.DESCRIPTION,
+          submissionType: 'url',
+          status: 'Submitted', // You might want to get this from document_status table
+          createdBy: createdBy,
+          createdAt: document.CREATED_AT,
+          sha256Hash: document.FINGERPRINT_HASH,
+          taskContext: taskInfo,
+          urlInfo: {
+            url: filePath,
+            domain: urlObj.hostname,
+            title: document.TITLE,
+            description: document.DESCRIPTION
+          }
+        }
+      });
+      return;
+    }
+    
+    // If it's a local file path, serve the file with metadata
+    if (filePath && fs.existsSync(filePath)) {
+      const fileName = path.basename(filePath);
+      const fileExtension = path.extname(fileName).toLowerCase();
+      const fileStats = fs.statSync(filePath);
+      
+      // Set appropriate content type based on file extension
+      let contentType = 'application/octet-stream';
+      switch (fileExtension) {
+        case '.pdf':
+          contentType = 'application/pdf';
+          break;
+        case '.doc':
+          contentType = 'application/msword';
+          break;
+        case '.docx':
+          contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          break;
+        case '.xls':
+          contentType = 'application/vnd.ms-excel';
+          break;
+        case '.xlsx':
+          contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+          break;
+        case '.ppt':
+          contentType = 'application/vnd.ms-powerpoint';
+          break;
+        case '.pptx':
+          contentType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+          break;
+        case '.txt':
+          contentType = 'text/plain';
+          break;
+        case '.jpg':
+        case '.jpeg':
+          contentType = 'image/jpeg';
+          break;
+        case '.png':
+          contentType = 'image/png';
+          break;
+        case '.gif':
+          contentType = 'image/gif';
+          break;
+      }
+
+      // Get task information if this document is linked to a task
+      let taskInfo = null;
+      const [tasks] = await pool.query(
+        `SELECT t.TASK_ID, t.TITLE, t.DUE_DATE, t.PRIORITY, t.STATUS, u.NAME as ASSIGNED_BY_NAME
+         FROM TASK t
+         LEFT JOIN user u ON t.ASSIGNED_BY = u.USER_ID
+         WHERE t.LINKED_DOCUMENT_ID = ?`,
+        [documentId]
+      );
+      if (tasks.length > 0) {
+        taskInfo = tasks[0];
+      }
+
+      // Get creator information
+      const createdBy = document.CREATOR_NAME || 'Unknown';
+
+      const metadata = {
+        documentId: document.DOCUMENT_ID,
+        title: document.TITLE,
+        description: document.DESCRIPTION,
+        submissionType: 'file',
+        status: 'Submitted',
+        createdBy: createdBy,
+        createdAt: document.CREATED_AT,
+        sha256Hash: document.FINGERPRINT_HASH,
+        taskContext: taskInfo,
+        fileInfo: {
+          name: fileName,
+          size: fileStats.size,
+          type: contentType,
+          lastModified: fileStats.mtime.toISOString()
+        }
+      };
+      
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+      res.setHeader('X-Document-Metadata', JSON.stringify(metadata));
+      
+      // Stream the file
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+      
+    } else {
+      return res.status(404).json({ success: false, error: 'File not found' });
+    }
+
+  } catch (error) {
+    console.error('Download document error:', error);
+    res.status(500).json({ success: false, error: 'Failed to download document' });
+  }
+};

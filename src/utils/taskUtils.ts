@@ -181,6 +181,11 @@ export const taskUtils = {
     dueSoon: number
     completionRate: number
     averageCompletionTime: number
+    submitted: number
+    submittedOnTime: number
+    submittedLate: number
+    submissionRate: number
+    onTimeRate: number
   } => {
     const completed = tasks.filter(t => t.STATUS === 'completed').length
     const pending = tasks.filter(t => t.STATUS === 'pending').length
@@ -188,6 +193,13 @@ export const taskUtils = {
     const overdue = taskUtils.filterOverdue(tasks).length
     const dueSoon = taskUtils.filterDueSoon(tasks).length
     const completionRate = tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0
+    
+    // Submission statistics
+    const submitted = tasks.filter(t => t.LINKED_DOCUMENT_ID).length
+    const submittedOnTime = tasks.filter(t => taskUtils.getSubmissionStatus(t) === 'on_time').length
+    const submittedLate = tasks.filter(t => taskUtils.getSubmissionStatus(t) === 'late').length
+    const submissionRate = tasks.length > 0 ? Math.round((submitted / tasks.length) * 100) : 0
+    const onTimeRate = submitted > 0 ? Math.round((submittedOnTime / submitted) * 100) : 0
     
     // Calculate average completion time (mock calculation)
     const averageCompletionTime = tasks.length > 0 ? Math.round(tasks.length * 2.5) : 0
@@ -200,7 +212,12 @@ export const taskUtils = {
       overdue,
       dueSoon,
       completionRate,
-      averageCompletionTime
+      averageCompletionTime,
+      submitted,
+      submittedOnTime,
+      submittedLate,
+      submissionRate,
+      onTimeRate
     }
   },
 
@@ -257,6 +274,26 @@ export const taskUtils = {
     if (taskUtils.isOverdue(task)) return 'overdue'
     if (taskUtils.isDueSoon(task)) return 'due-soon'
     return 'on-time'
+  },
+
+  /**
+   * Get submission status for a task (robust logic to determine if submission was on-time or late)
+   */
+  getSubmissionStatus: (task: Types.TaskWithDetails): 'on_time' | 'late' | null => {
+    if (!task.LINKED_DOCUMENT_ID || !task.linkedDocument) {
+      return null; // No submission
+    }
+
+    const dueDate = new Date(task.DUE_DATE);
+    const submissionDate = new Date(task.linkedDocument.CREATED_AT);
+    
+    // Compare dates only (ignore time) to avoid timezone issues
+    const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+    const submissionDateOnly = new Date(submissionDate.getFullYear(), submissionDate.getMonth(), submissionDate.getDate());
+    
+    // If submission date is before or equal to due date, it's on time
+    // If submission date is after due date, it's late
+    return submissionDateOnly <= dueDateOnly ? 'on_time' : 'late';
   },
 
   /**

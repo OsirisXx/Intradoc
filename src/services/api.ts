@@ -961,6 +961,16 @@ class ApiService {
     }
   }
 
+  async uploadPostAttachment(formData: FormData): Promise<any> {
+    try {
+      const response = await apiClient.postFormData('/posts/upload', formData);
+      return response;
+    } catch (error) {
+      console.error('Error uploading post attachment:', error);
+      return { success: false, error: 'Failed to upload attachment' };
+    }
+  }
+
   async updatePost(postId: number, postData: any): Promise<ApiResponse<any>> {
     try {
       const response = await apiClient.put(`/posts/${postId}`, postData);
@@ -978,6 +988,116 @@ class ApiService {
     } catch (error) {
       console.error('Error deleting post:', error);
       return { success: false, error: 'Failed to delete post' };
+    }
+  }
+
+  // Document download with authentication
+  async downloadDocument(documentId: number): Promise<{ 
+    success: boolean; 
+    error?: string; 
+    blob?: Blob; 
+    filename?: string;
+    isUrl?: boolean;
+    url?: string;
+    metadata?: any;
+    contentType?: string;
+  }> {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        return { success: false, error: 'Authentication token not found' };
+      }
+
+      const response = await fetch(`${this.baseUrl}/documents/download/${documentId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Download failed' }));
+        return { success: false, error: errorData.error || 'Download failed' };
+      }
+
+      // Check if this is a URL response (for external links)
+      const contentType = response.headers.get('Content-Type');
+      if (contentType && contentType.includes('application/json')) {
+        // This is a URL response, not a file
+        const urlData = await response.json();
+        if (urlData.isUrl) {
+          console.log('URL response with metadata:', urlData);
+          return { 
+            success: true, 
+            isUrl: true, 
+            url: urlData.url, 
+            filename: urlData.filename,
+            contentType: 'url',
+            metadata: urlData.metadata
+          };
+        }
+      }
+
+      // Get filename from Content-Disposition header (for file responses)
+      const contentDisposition = response.headers.get('Content-Disposition');
+      const metadataHeader = response.headers.get('X-Document-Metadata');
+      let filename = 'document';
+      let metadata = null;
+      
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      if (metadataHeader) {
+        try {
+          metadata = JSON.parse(metadataHeader);
+        } catch (e) {
+          console.error('Failed to parse metadata header:', e);
+        }
+      }
+
+      const blob = await response.blob();
+      
+      return { success: true, blob, filename, contentType, isUrl: false, metadata };
+    } catch (error) {
+      console.error('Error downloading document:', error);
+      return { success: false, error: 'Failed to download document' };
+    }
+  }
+
+  // Helper method to open document in new tab with authentication
+  async viewDocument(documentId: number): Promise<{ success: boolean; error?: string }> {
+    try {
+      const downloadResult = await this.downloadDocument(documentId);
+      
+      if (!downloadResult.success) {
+        return { success: false, error: downloadResult.error };
+      }
+
+      if (!downloadResult.blob) {
+        return { success: false, error: 'No document data received' };
+      }
+
+      // Create object URL and open in new tab
+      const url = URL.createObjectURL(downloadResult.blob);
+      const newWindow = window.open(url, '_blank', 'noopener,noreferrer');
+      
+      if (!newWindow) {
+        URL.revokeObjectURL(url);
+        return { success: false, error: 'Failed to open document. Please check your popup blocker settings.' };
+      }
+
+      // Clean up the object URL after a delay to allow the document to load
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 10000);
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error viewing document:', error);
+      return { success: false, error: 'Failed to view document' };
     }
   }
 }

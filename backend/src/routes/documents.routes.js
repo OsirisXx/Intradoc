@@ -19,6 +19,9 @@ router.post('/:documentId/request-revision', documentsController.requestRevision
 router.post('/:documentId/forward-regional', documentsController.forwardToRegional);
 router.get('/:documentId/approval-history', documentsController.getApprovalHistory);
 
+// Document download
+router.get('/download/:documentId', documentsController.downloadDocument);
+
 // Legacy endpoint (keep for backward compatibility)
 router.post('/status', documentsController.updateDocumentStatus);
 

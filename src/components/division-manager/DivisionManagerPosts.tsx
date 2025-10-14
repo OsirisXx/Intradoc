@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { apiService } from '../../services/api'
 import * as Types from '../../types'
-import './SectionUnitHead.css'
+import '../section-unit-head/SectionUnitHead.css'
 
-export function SectionUnitHeadPosts() {
+export function DivisionManagerPosts() {
   const { user } = useAuth()
   const [posts, setPosts] = useState<Types.StreamPost[]>([])
   const [loading, setLoading] = useState(true)
@@ -319,3 +319,4 @@ export function SectionUnitHeadPosts() {
     </div>
   )
 }
+

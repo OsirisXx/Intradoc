@@ -90,12 +90,14 @@ exports.getTasksAssignedTo = async (req, res) => {
         d.FILE_LINK as DOC_FILE_LINK,
         d.FINGERPRINT_HASH as DOC_FINGERPRINT_HASH,
         d.CREATED_AT as DOC_CREATED_AT,
-        d.TAGS as DOC_TAGS
+        d.TAGS as DOC_TAGS,
+        doc_creator.NAME as DOC_CREATED_BY_NAME
       FROM TASK t
       LEFT JOIN user assigner ON t.ASSIGNED_BY = assigner.USER_ID
       LEFT JOIN user assignee ON t.ASSIGNED_TO = assignee.USER_ID
       LEFT JOIN section s ON t.SECTION_ID = s.SECTION_ID
       LEFT JOIN document d ON t.LINKED_DOCUMENT_ID = d.DOCUMENT_ID
+      LEFT JOIN user doc_creator ON d.CREATED_BY = doc_creator.USER_ID
       WHERE t.ASSIGNED_TO = ?
     `;
 
@@ -115,6 +117,10 @@ exports.getTasksAssignedTo = async (req, res) => {
     query += ' ORDER BY t.DUE_DATE ASC, t.PRIORITY DESC';
 
     const [rawTasks] = await pool.query(query, params);
+    console.log(`Found ${rawTasks.length} tasks for user ${userId}`);
+    if (rawTasks.length > 0) {
+      console.log('Sample task with linked document:', rawTasks[0]);
+    }
 
     // Transform the flat query results into nested structure
     const tasks = rawTasks.map(task => ({
@@ -143,7 +149,8 @@ exports.getTasksAssignedTo = async (req, res) => {
         FILE_LINK: task.DOC_FILE_LINK,
         FINGERPRINT_HASH: task.DOC_FINGERPRINT_HASH,
         CREATED_AT: task.DOC_CREATED_AT,
-        TAGS: task.DOC_TAGS
+        TAGS: task.DOC_TAGS,
+        CREATED_BY_NAME: task.DOC_CREATED_BY_NAME
       } : null
     }));
 
@@ -189,11 +196,13 @@ exports.getTasksAssignedBy = async (req, res) => {
         d.FILE_LINK as DOC_FILE_LINK,
         d.FINGERPRINT_HASH as DOC_FINGERPRINT_HASH,
         d.CREATED_AT as DOC_CREATED_AT,
-        d.TAGS as DOC_TAGS
+        d.TAGS as DOC_TAGS,
+        doc_creator.NAME as DOC_CREATED_BY_NAME
       FROM TASK t
       LEFT JOIN user assignee ON t.ASSIGNED_TO = assignee.USER_ID
       LEFT JOIN section s ON t.SECTION_ID = s.SECTION_ID
       LEFT JOIN document d ON t.LINKED_DOCUMENT_ID = d.DOCUMENT_ID
+      LEFT JOIN user doc_creator ON d.CREATED_BY = doc_creator.USER_ID
       WHERE t.ASSIGNED_BY = ?
     `;
 
@@ -211,6 +220,9 @@ exports.getTasksAssignedBy = async (req, res) => {
 
     const [rawTasks] = await pool.query(query, params);
     console.log('Query result:', rawTasks.length, 'tasks found');
+    if (rawTasks.length > 0) {
+      console.log('Sample task with linked document:', rawTasks[0]);
+    }
 
     // Transform the flat query results into nested structure
     const tasks = rawTasks.map(task => ({
@@ -238,7 +250,8 @@ exports.getTasksAssignedBy = async (req, res) => {
         FILE_LINK: task.DOC_FILE_LINK,
         FINGERPRINT_HASH: task.DOC_FINGERPRINT_HASH,
         CREATED_AT: task.DOC_CREATED_AT,
-        TAGS: task.DOC_TAGS
+        TAGS: task.DOC_TAGS,
+        CREATED_BY_NAME: task.DOC_CREATED_BY_NAME
       } : null
     }));
 

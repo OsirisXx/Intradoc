@@ -33,7 +33,6 @@ import { DynamicSidebar } from './components/sidebars/DynamicSidebar'
 
 // Section/Unit Head components
 import { SectionUnitHeadDashboard } from './components/section-unit-head/SectionUnitHeadDashboard'
-import { SectionUnitHeadTaskAssignment } from './components/section-unit-head/SectionUnitHeadTaskAssignment'
 import { SectionUnitHeadReports } from './components/section-unit-head/SectionUnitHeadReports'
 import SectionUnitHeadTasks from './components/section-unit-head/SectionUnitHeadTasks'
 import SectionUnitHeadNotifications from './components/section-unit-head/SectionUnitHeadNotifications'
@@ -44,7 +43,11 @@ import { SectionUnitHeadDocumentWorks } from './components/section-unit-head/Sec
 // Division Manager components
 import { DivisionManagerTaskAssignment } from './components/division-manager/DivisionManagerTaskAssignment'
 import { DivisionManagerSendToRegional } from './components/division-manager/DivisionManagerSendToRegional'
-import { DivisionManagerReview } from './components/division-manager/DivisionManagerReview'
+import { DivisionManagerDashboard } from './components/division-manager/DivisionManagerDashboard'
+import { DivisionManagerDocumentWorks } from './components/division-manager/DivisionManagerDocumentWorks'
+import { DivisionManagerPosts } from './components/division-manager/DivisionManagerPosts'
+import DivisionManagerFeedback from './components/division-manager/DivisionManagerFeedback'
+import DivisionManagerNotifications from './components/division-manager/DivisionManagerNotifications'
 
 // Regional Director components
 import { RegionalDirectorProgressOversight } from './components/regional-director/RegionalDirectorProgressOversight'
@@ -129,7 +132,6 @@ function App() {
                       <Route path="/notifications" element={<SectionUnitHeadNotifications />} />
                       <Route path="/feedback" element={<SectionUnitHeadFeedback />} />
                       <Route path="/reports" element={<SectionUnitHeadReports />} />
-                      <Route path="/task-assignment" element={<SectionUnitHeadTaskAssignment />} />
                       <Route path="/posts" element={<SectionUnitHeadPosts />} />
                     </Routes>
                   </div>
@@ -147,14 +149,15 @@ function App() {
                   <StaffTopbar onToggleSidebar={toggleSidebar} />
                   <div className="content">
                     <Routes>
+                      <Route path="/" element={<DivisionManagerDashboard />} />
+                      <Route path="/work" element={<DivisionManagerDocumentWorks />} />
                       <Route path="/task-assignment" element={<DivisionManagerTaskAssignment />} />
-                      <Route path="/review" element={<DivisionManagerReview />} />
                       <Route path="/reports" element={<SectionUnitHeadReports />} />
+                      <Route path="/posts" element={<DivisionManagerPosts />} />
                       <Route path="/send-to-regional" element={<DivisionManagerSendToRegional />} />
-                      <Route path="/upload" element={<div className="page"><h1>Upload</h1><p>Coming soon...</p></div>} />
                       <Route path="/tasks" element={<div className="page"><h1>Tasks</h1><p>Coming soon...</p></div>} />
-                      <Route path="/notifications" element={<div className="page"><h1>Notifications</h1><p>Coming soon...</p></div>} />
-                      <Route path="/feedback" element={<div className="page"><h1>Feedback</h1><p>Coming soon...</p></div>} />
+                      <Route path="/notifications" element={<DivisionManagerNotifications />} />
+                      <Route path="/feedback" element={<DivisionManagerFeedback />} />
                     </Routes>
                   </div>
                 </main>
@@ -171,6 +174,7 @@ function App() {
                   <StaffTopbar onToggleSidebar={toggleSidebar} />
                   <div className="content">
                     <Routes>
+                      <Route path="/" element={<DivisionManagerDashboard />} />
                       <Route path="/review" element={<RegionalDirectorReview />} />
                       <Route path="/progress-oversight" element={<RegionalDirectorProgressOversight />} />
                     </Routes>
