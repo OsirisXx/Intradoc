@@ -287,7 +287,7 @@ export function SectionUnitHeadDocumentWorks() {
                       <td>{task.TITLE}</td>
                       <td>{getTaskStatusBadge(task.STATUS)}</td>
                       <td>
-                        {task.LINKED_DOCUMENT_ID ? (
+                        {task.STATUS === 'completed' && task.LINKED_DOCUMENT_ID ? (
                           <span style={{
                             padding: '2px 6px',
                             borderRadius: '4px',

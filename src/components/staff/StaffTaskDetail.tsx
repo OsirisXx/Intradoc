@@ -153,13 +153,17 @@ export function StaffTaskDetail() {
 
   const handleSubmitTask = async () => {
     if (!task) return
+    
     try {
       setSubmitting(true)
       const response = await apiService.submitTask(task.TASK_ID)
-      if (!response.success) throw new Error(response.error || 'Failed')
+      if (!response.success) throw new Error(response.error || 'Failed to submit task')
+      
+      // Reload task data to reflect the status change
       await loadTask()
       await loadTaskDocuments()
     } catch (error) {
+      console.error('Submit task error:', error)
       alert((error as Error).message)
     } finally {
       setSubmitting(false)
@@ -251,7 +255,7 @@ export function StaffTaskDetail() {
         <div className="error-state">
           <h3>Task not found</h3>
           <p>The requested task could not be found.</p>
-          <button onClick={() => navigate('/staff/work')} className="btn btn-primary">
+          <button type="button" onClick={() => navigate('/staff/work')} className="btn btn-primary">
             Back to Work
           </button>
         </div>
@@ -264,6 +268,7 @@ export function StaffTaskDetail() {
       {/* Back Button */}
       <div className="back-button-container">
         <button 
+          type="button"
           onClick={() => navigate('/staff/work')} 
           className="back-button"
         >
@@ -332,6 +337,7 @@ export function StaffTaskDetail() {
               <div className="action-buttons">
                 {task.STATUS !== 'completed' ? (
                   <button 
+                    type="button"
                     onClick={handleSubmitTask} 
                     disabled={submitting}
                     className="btn btn-primary"
@@ -345,6 +351,7 @@ export function StaffTaskDetail() {
                   </button>
                 ) : (
                   <button 
+                    type="button"
                     onClick={handleUnsubmitTask} 
                     disabled={submitting}
                     className="btn btn-secondary"
@@ -445,13 +452,15 @@ export function StaffTaskDetail() {
                     </div>
                     <div className="attachment-actions">
                       <button 
+                        type="button"
                         onClick={() => handleViewDocument(doc)}
                         className="btn btn-outline view-btn"
                       >
                         View
                       </button>
-                      {task.STATUS !== 'completed' && (
+                      {task.STATUS !== 'submitted' && (
                         <button 
+                          type="button"
                           onClick={() => handleDeleteAttachment(doc.DOCUMENT_ID)}
                           className="btn btn-danger delete-btn"
                         >

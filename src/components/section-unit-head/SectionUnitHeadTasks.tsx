@@ -293,8 +293,8 @@ const SectionUnitHeadTasks: React.FC = () => {
     const matchesSearch = task.TITLE.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          task.DESCRIPTION.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesSubmission = submissionFilter === 'all' || 
-      (submissionFilter === 'with_submission' && task.LINKED_DOCUMENT_ID) ||
-      (submissionFilter === 'no_submission' && !task.LINKED_DOCUMENT_ID);
+      (submissionFilter === 'with_submission' && task.STATUS === 'completed' && task.LINKED_DOCUMENT_ID) ||
+      (submissionFilter === 'no_submission' && (task.STATUS !== 'completed' || !task.LINKED_DOCUMENT_ID));
     
     return matchesStatus && matchesPriority && matchesAssignee && matchesSearch && matchesSubmission;
   });
@@ -305,7 +305,7 @@ const SectionUnitHeadTasks: React.FC = () => {
     pending: currentTasks.filter(t => t.STATUS === 'pending').length,
     inProgress: currentTasks.filter(t => t.STATUS === 'in_progress').length,
     overdue: currentTasks.filter(t => isOverdue(t.DUE_DATE, t.STATUS)).length,
-    submitted: currentTasks.filter(t => t.LINKED_DOCUMENT_ID).length,
+    submitted: currentTasks.filter(t => t.STATUS === 'completed' && t.LINKED_DOCUMENT_ID).length,
     submittedOnTime: currentTasks.filter(t => getSubmissionStatus(t) === 'on_time').length,
     submittedLate: currentTasks.filter(t => getSubmissionStatus(t) === 'late').length
   };
@@ -647,7 +647,7 @@ const SectionUnitHeadTasks: React.FC = () => {
                       {isOverdue(task.DUE_DATE, task.STATUS) && (
                         <span className="overdue-badge">OVERDUE</span>
                       )}
-                      {task.LINKED_DOCUMENT_ID && (
+                      {task.STATUS === 'completed' && task.LINKED_DOCUMENT_ID && (
                         <span className={`submission-indicator ${getSubmissionStatus(task) === 'late' ? 'submission-late' : 'submission-on-time'}`}>
                           📄 {getSubmissionStatus(task) === 'late' ? 'SUBMITTED LATE' : 'SUBMITTED'}
                         </span>
@@ -688,7 +688,7 @@ const SectionUnitHeadTasks: React.FC = () => {
                   </div>
                   
                   {/* Submission Details */}
-                  {task.LINKED_DOCUMENT_ID && task.linkedDocument ? (
+                  {task.STATUS === 'completed' && task.LINKED_DOCUMENT_ID && task.linkedDocument ? (
                     <div className="document-preview-section">
                       <div className="submission-info">
                         <h4>📄 Submitted Work</h4>
@@ -718,7 +718,7 @@ const SectionUnitHeadTasks: React.FC = () => {
                   )}
 
                   <div className="task-actions">
-                    {(task.LINKED_DOCUMENT_ID || task.linkedDocument) && (
+                    {task.STATUS === 'completed' && (task.LINKED_DOCUMENT_ID || task.linkedDocument) && (
                       <button
                         onClick={() => handleViewSubmission(task)}
                         className="btn btn-secondary btn-xs"
@@ -799,14 +799,14 @@ const SectionUnitHeadTasks: React.FC = () => {
                   {isOverdue(task.DUE_DATE, task.STATUS) && (
                     <span className="overdue-badge">OVERDUE</span>
                   )}
-                  {task.LINKED_DOCUMENT_ID && (
+                  {task.STATUS === 'completed' && task.LINKED_DOCUMENT_ID && (
                     <span className={`submission-indicator ${getSubmissionStatus(task) === 'late' ? 'submission-late' : 'submission-on-time'}`}>
                       📄 {getSubmissionStatus(task) === 'late' ? 'SUBMITTED LATE' : 'SUBMITTED'}
                     </span>
                   )}
                 </div>
                 <div className="task-list-actions">
-                  {(task.LINKED_DOCUMENT_ID || task.linkedDocument) && (
+                  {task.STATUS === 'completed' && (task.LINKED_DOCUMENT_ID || task.linkedDocument) && (
                     <button
                       onClick={() => handleViewSubmission(task)}
                       className="btn btn-secondary btn-xs"

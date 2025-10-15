@@ -75,7 +75,7 @@ exports.getTasksAssignedTo = async (req, res) => {
         t.PRIORITY,
         t.CATEGORY,
         t.TAGS,
-        t.STATUS,
+        t.STATUS as TASK_STATUS,
         t.CREATED_AT,
         t.UPDATED_AT,
         t.REQUIRES_DOCUMENT,
@@ -117,10 +117,6 @@ exports.getTasksAssignedTo = async (req, res) => {
     query += ' ORDER BY t.DUE_DATE ASC, t.PRIORITY DESC';
 
     const [rawTasks] = await pool.query(query, params);
-    console.log(`Found ${rawTasks.length} tasks for user ${userId}`);
-    if (rawTasks.length > 0) {
-      console.log('Sample task with linked document:', rawTasks[0]);
-    }
 
     // Transform the flat query results into nested structure
     const tasks = rawTasks.map(task => ({
@@ -133,7 +129,7 @@ exports.getTasksAssignedTo = async (req, res) => {
       PRIORITY: task.PRIORITY,
       CATEGORY: task.CATEGORY,
       TAGS: task.TAGS,
-      STATUS: task.STATUS,
+      STATUS: task.TASK_STATUS,
       CREATED_AT: task.CREATED_AT,
       UPDATED_AT: task.UPDATED_AT,
       REQUIRES_DOCUMENT: task.REQUIRES_DOCUMENT,
@@ -182,7 +178,7 @@ exports.getTasksAssignedBy = async (req, res) => {
         t.PRIORITY,
         t.CATEGORY,
         t.TAGS,
-        t.STATUS,
+        t.STATUS as TASK_STATUS,
         t.CREATED_AT,
         t.UPDATED_AT,
         t.REQUIRES_DOCUMENT,
@@ -235,7 +231,7 @@ exports.getTasksAssignedBy = async (req, res) => {
       PRIORITY: task.PRIORITY,
       CATEGORY: task.CATEGORY,
       TAGS: task.TAGS,
-      STATUS: task.STATUS,
+      STATUS: task.TASK_STATUS,
       CREATED_AT: task.CREATED_AT,
       UPDATED_AT: task.UPDATED_AT,
       REQUIRES_DOCUMENT: task.REQUIRES_DOCUMENT,
@@ -381,8 +377,7 @@ exports.submitTask = async (req, res) => {
     }
 
     // Allow submission even without attachments (for "Mark as Done" functionality)
-
-    await pool.query('UPDATE TASK SET STATUS = "submitted", UPDATED_AT = NOW() WHERE TASK_ID = ? AND ASSIGNED_TO = ?', [taskId, userId]);
+    await pool.query('UPDATE TASK SET STATUS = "completed", UPDATED_AT = NOW() WHERE TASK_ID = ? AND ASSIGNED_TO = ?', [taskId, userId]);
 
     res.json({ success: true, message: 'Task submitted' });
   } catch (error) {
@@ -448,14 +443,14 @@ exports.getOverdueTasks = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const [tasks] = await pool.query(
+    const [rawTasks] = await pool.query(
       `SELECT 
         t.TASK_ID,
         t.TITLE,
         t.DESCRIPTION,
         t.DUE_DATE,
         t.PRIORITY,
-        t.STATUS,
+        t.STATUS as TASK_STATUS,
         DATEDIFF(CURDATE(), t.DUE_DATE) as DAYS_OVERDUE
       FROM TASK t
       WHERE t.ASSIGNED_TO = ? 
@@ -464,6 +459,12 @@ exports.getOverdueTasks = async (req, res) => {
       ORDER BY t.DUE_DATE ASC`,
       [userId]
     );
+
+    // Transform to map TASK_STATUS back to STATUS
+    const tasks = rawTasks.map(task => ({
+      ...task,
+      STATUS: task.TASK_STATUS
+    }));
 
     res.json({
       success: true,

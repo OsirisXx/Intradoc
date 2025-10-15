@@ -195,7 +195,7 @@ export const taskUtils = {
     const completionRate = tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0
     
     // Submission statistics
-    const submitted = tasks.filter(t => t.LINKED_DOCUMENT_ID).length
+    const submitted = tasks.filter(t => t.STATUS === 'completed' && t.LINKED_DOCUMENT_ID).length
     const submittedOnTime = tasks.filter(t => taskUtils.getSubmissionStatus(t) === 'on_time').length
     const submittedLate = tasks.filter(t => taskUtils.getSubmissionStatus(t) === 'late').length
     const submissionRate = tasks.length > 0 ? Math.round((submitted / tasks.length) * 100) : 0
@@ -280,7 +280,8 @@ export const taskUtils = {
    * Get submission status for a task (robust logic to determine if submission was on-time or late)
    */
   getSubmissionStatus: (task: Types.TaskWithDetails): 'on_time' | 'late' | null => {
-    if (!task.LINKED_DOCUMENT_ID || !task.linkedDocument) {
+    // Only consider it submitted if STATUS is 'completed'
+    if (task.STATUS !== 'completed' || !task.LINKED_DOCUMENT_ID || !task.linkedDocument) {
       return null; // No submission
     }
 

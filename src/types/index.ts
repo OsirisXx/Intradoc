@@ -492,7 +492,7 @@ export interface Task {
   ASSIGNED_BY: number; // User ID of assigner
   ASSIGNED_TO: number; // User ID of assignee
   SECTION_ID: number; // For filtering/organization
-  STATUS: 'pending' | 'in_progress' | 'completed' | 'overdue';
+  STATUS: 'pending' | 'in_progress' | 'completed' | 'cancelled';
   PRIORITY: 'low' | 'medium' | 'high' | 'urgent';
   DUE_DATE: string; // ISO date string
   CREATED_AT: string;
