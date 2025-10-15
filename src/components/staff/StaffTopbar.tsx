@@ -2,6 +2,8 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { authService } from '../../services/auth'
+import { API_URL } from '../../services/apiClient'
+import './StaffTopbar.css'
 
 interface StaffTopbarProps {
   onToggleSidebar?: () => void
@@ -82,10 +84,18 @@ export function StaffTopbar({ onToggleSidebar }: StaffTopbarProps) {
           />
         </div>
         <div className="user-avatar" title={`${user?.NAME || 'User'} (${user?.FUNCTIONAL_ROLE?.replace(/_/g, ' ') || 'STAFF'})`}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-            <circle cx="12" cy="7" r="4"/>
-          </svg>
+          {user?.PROFILE_IMAGE ? (
+            <img 
+              src={user.PROFILE_IMAGE.startsWith('http') ? user.PROFILE_IMAGE : API_URL.replace(/\/api$/, '') + user.PROFILE_IMAGE} 
+              alt="Profile" 
+              className="user-avatar-img"
+            />
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          )}
         </div>
         <button 
           onClick={handleLogout}

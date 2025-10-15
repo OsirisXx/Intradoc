@@ -12,7 +12,12 @@ const authenticate = (req, res, next) => {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
-  req.user = decoded; // Attach user info to request
+  // Normalize token payload so downstream code can rely on expected fields
+  req.user = {
+    ...decoded,
+    USER_ID: decoded.USER_ID ?? decoded.userId,
+    FUNCTIONAL_ROLE: decoded.FUNCTIONAL_ROLE ?? decoded.role
+  };
   next();
 };
 

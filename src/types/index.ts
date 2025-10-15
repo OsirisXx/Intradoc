@@ -226,6 +226,7 @@ export interface User {
   FUNCTIONAL_ROLE: FunctionalRole;  // What they can do (staff, section_unit_head, division_manager, etc.)
   ORGANIZATIONAL_ASSIGNMENT: OrganizationalAssignment;  // Where they work (Engineering, Planning, etc.)
   STATUS: 'active' | 'pending' | 'suspended' | 'inactive';
+  PROFILE_IMAGE?: string;  // URL path to profile image
   CREATED_AT: string;
   APPROVED_AT?: string;
   APPROVED_BY?: number;

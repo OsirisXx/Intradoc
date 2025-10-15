@@ -10,6 +10,7 @@ interface AuthContextType {
   login: (user: AuthUser) => void;
   logout: () => void;
   checkAuth: () => Promise<boolean>;
+  updateUser: (userData: AuthUser) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -71,6 +72,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.setItem('loginTime', Date.now().toString());
   };
 
+  const updateUser = (userData: AuthUser) => {
+    setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));
+  };
+
   const logout = () => {
     setUser(null);
     localStorage.removeItem('user');
@@ -126,6 +132,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     login,
     logout,
     checkAuth,
+    updateUser,
   };
 
   return (

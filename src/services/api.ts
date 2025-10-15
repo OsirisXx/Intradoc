@@ -37,7 +37,7 @@ type SystemHealth = Types.SystemHealth;
 
 // Mock data - In a real application, these would be API calls
 class ApiService {
-  private baseUrl = 'http://localhost:3001/api'; // Adjust based on your backend
+  private baseUrl = 'http://localhost:3002/api'; // Adjust based on your backend
 
   // Real API calls using apiClient
   async getUsers(): Promise<ApiResponse<User[]>> {
@@ -1138,6 +1138,53 @@ class ApiService {
     } catch (error) {
       console.error('Error viewing document:', error);
       return { success: false, error: 'Failed to view document' };
+    }
+  }
+
+  // User profile management methods
+  async getCurrentUserProfile(): Promise<ApiResponse<User>> {
+    try {
+      const response = await apiClient.get('/users/profile');
+      return response;
+    } catch (error) {
+      console.error('Error fetching current user profile:', error);
+      return { success: false, error: 'Failed to fetch user profile' };
+    }
+  }
+
+  async updateUserProfile(data: { name: string; email: string }): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.put('/users/profile', data);
+      return response;
+    } catch (error) {
+      console.error('Error updating user profile:', error);
+      return { success: false, error: 'Failed to update profile' };
+    }
+  }
+
+  async updateUserPassword(currentPassword: string, newPassword: string): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.put('/users/password', {
+        currentPassword,
+        newPassword
+      });
+      return response;
+    } catch (error) {
+      console.error('Error updating password:', error);
+      return { success: false, error: 'Failed to update password' };
+    }
+  }
+
+  async uploadProfileImage(file: File): Promise<ApiResponse<{ imagePath: string }>> {
+    try {
+      const formData = new FormData();
+      formData.append('profileImage', file);
+      
+      const response = await apiClient.postFormData('/users/profile-image', formData);
+      return response;
+    } catch (error) {
+      console.error('Error uploading profile image:', error);
+      return { success: false, error: 'Failed to upload profile image' };
     }
   }
 }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { DateTimePicker } from '../common/DateTimePicker';
@@ -8,6 +9,7 @@ import './SectionUnitHead.css';
 
 const SectionUnitHeadTasks: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<Types.TaskWithDetails[]>([]);
   const [assignedTasks, setAssignedTasks] = useState<Types.TaskWithDetails[]>([]);
   const [staff, setStaff] = useState<Types.User[]>([]);
@@ -186,8 +188,11 @@ const SectionUnitHeadTasks: React.FC = () => {
 
   // Document review handler functions
   const handleViewSubmission = (task: Types.TaskWithDetails) => {
-    setSelectedTaskForReview(task);
-    setShowDocumentModal(true);
+    if (isDivisionManager) {
+      navigate(`/division-manager/task-assignment/${task.TASK_ID}`);
+    } else {
+      navigate(`/section-unit-head/work/${task.TASK_ID}`);
+    }
   };
 
   const handleDownloadDocument = (fileLink: string, fileName: string) => {
@@ -718,19 +723,17 @@ const SectionUnitHeadTasks: React.FC = () => {
                   )}
 
                   <div className="task-actions">
-                    {task.STATUS === 'completed' && (task.LINKED_DOCUMENT_ID || task.linkedDocument) && (
-                      <button
-                        onClick={() => handleViewSubmission(task)}
-                        className="btn btn-secondary btn-xs"
-                        style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                          <polyline points="14,2 14,8 20,8"/>
-                        </svg>
-                        View Submission
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleViewSubmission(task)}
+                      className="btn btn-secondary btn-xs"
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14,2 14,8 20,8"/>
+                      </svg>
+                      View Submission
+                    </button>
                     
                     {task.STATUS === 'pending' && (
                       <button
@@ -806,15 +809,13 @@ const SectionUnitHeadTasks: React.FC = () => {
                   )}
                 </div>
                 <div className="task-list-actions">
-                  {task.STATUS === 'completed' && (task.LINKED_DOCUMENT_ID || task.linkedDocument) && (
-                    <button
-                      onClick={() => handleViewSubmission(task)}
-                      className="btn btn-secondary btn-xs"
-                      style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
-                    >
-                      View Submission
-                    </button>
-                  )}
+                  <button
+                    onClick={() => handleViewSubmission(task)}
+                    className="btn btn-secondary btn-xs"
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
+                  >
+                    View Submission
+                  </button>
                   
                   {task.STATUS === 'pending' && (
                     <button

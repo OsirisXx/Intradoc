@@ -1263,6 +1263,15 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+.avatar-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
 /* User Menu Styles */
 .user-menu {
   position: relative;
