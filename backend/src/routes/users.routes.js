@@ -7,11 +7,15 @@ const {
   getCurrentUser, 
   updateProfile, 
   updatePassword, 
-  uploadProfileImage 
+  uploadProfileImage,
+  getDivisionManagers
 } = require('../controllers/users.controller');
 
 // Get users by section (with optional functional role filter)
 router.get('/section/:sectionId', authenticate, getUsersBySection);
+
+// Get Division Managers by division ID
+router.get('/division-managers/:divisionId', authenticate, getDivisionManagers);
 
 // Get all users (admin only)
 router.get('/', authenticate, getAllUsers);

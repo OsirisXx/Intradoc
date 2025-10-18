@@ -349,6 +349,58 @@ class ApiService {
     try { return await apiClient.put(`/tasks/${taskId}/unsubmit`, {}); } catch (error) { console.error('Error unsubmitting task:', error); return { success: false, error: 'Failed to unsubmit task' }; }
   }
 
+  // Task document approval workflow methods
+  async approveTaskDocuments(taskId: number, forwardToDivision: boolean = false, remarks?: string): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.post(`/tasks/${taskId}/approve`, {
+        forwardToDivision,
+        remarks: remarks || ''
+      });
+      return response;
+    } catch (error) {
+      console.error('Error approving task documents:', error);
+      return { success: false, error: 'Failed to approve task documents' };
+    }
+  }
+
+  async rejectTaskDocuments(taskId: number, remarks: string): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.post(`/tasks/${taskId}/reject`, {
+        remarks
+      });
+      return response;
+    } catch (error) {
+      console.error('Error rejecting task documents:', error);
+      return { success: false, error: 'Failed to reject task documents' };
+    }
+  }
+
+  async forwardTaskToDivisionManager(taskId: number, remarks?: string, targetDivisionManagerId?: number, targetTaskId?: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.post(`/tasks/${taskId}/forward-division`, {
+        remarks: remarks || '',
+        targetDivisionManagerId,
+        targetTaskId
+      });
+      return response;
+    } catch (error) {
+      console.error('Error forwarding task to division manager:', error);
+      return { success: false, error: 'Failed to forward task to division manager' };
+    }
+  }
+
+  async forwardTaskToRegional(taskId: number, remarks?: string): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.post(`/tasks/${taskId}/forward-regional`, {
+        remarks: remarks || ''
+      });
+      return response;
+    } catch (error) {
+      console.error('Error forwarding task to regional director:', error);
+      return { success: false, error: 'Failed to forward task to regional director' };
+    }
+  }
+
   async getDocumentsBySection(sectionId: number): Promise<ApiResponse<DocumentWithDetails[]>> {
     try {
       const response = await apiClient.get(`/documents/section/${sectionId}`);
@@ -427,6 +479,48 @@ class ApiService {
     } catch (error) {
       console.error('Error fetching task documents:', error);
       return { success: false, error: 'Failed to fetch task documents' };
+    }
+  }
+
+  async getTaskApprovalHistory(taskId: number, userId: number): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await apiClient.get(`/tasks/${taskId}/approval-history/${userId}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching task approval history:', error);
+      return { success: false, error: 'Failed to fetch approval history' };
+    }
+  }
+
+  async getDivisionManagers(divisionId: number): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await apiClient.get(`/users/division-managers/${divisionId}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching division managers:', error);
+      return { success: false, error: 'Failed to fetch division managers' };
+    }
+  }
+
+  async getDivisionManagerTasks(divisionManagerId: number): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await apiClient.get(`/tasks/assigned-by/${divisionManagerId}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching division manager tasks:', error);
+      return { success: false, error: 'Failed to fetch division manager tasks' };
+    }
+  }
+
+  async sendBackToSectionHead(taskId: number, remarks: string): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.post(`/tasks/${taskId}/send-back-section-head`, {
+        remarks
+      });
+      return response;
+    } catch (error) {
+      console.error('Error sending back to section head:', error);
+      return { success: false, error: 'Failed to send back to section head' };
     }
   }
 

@@ -28,6 +28,7 @@ import { AdminUsers } from './components/admin/AdminUsers'
 import { AdminTools } from './components/admin/AdminTools'
 import { AdminAccountManagement } from './components/admin/AdminAccountManagement'
 import { AuthProvider } from './contexts/AuthContext'
+import { DialogProvider } from './components/ui/DialogProvider'
 
 // Import role-specific components
 import { DynamicSidebar } from './components/sidebars/DynamicSidebar'
@@ -66,7 +67,8 @@ function App() {
 
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <DialogProvider>
+        <BrowserRouter>
         <Routes>
           <Route path="/" element={<LoginPage />} />
           <Route path="/login" element={<LoginPage />} />
@@ -158,6 +160,7 @@ function App() {
                     <Routes>
                       <Route path="/" element={<DivisionManagerDashboard />} />
                       <Route path="/work" element={<DivisionManagerDocumentWorks />} />
+                      <Route path="/work/:taskId" element={<DivisionManagerTaskDetail />} />
                       <Route path="/task-assignment" element={<DivisionManagerTaskAssignment />} />
                       <Route path="/task-assignment/:taskId" element={<DivisionManagerTaskDetail />} />
                       <Route path="/reports" element={<SectionUnitHeadReports />} />
@@ -185,6 +188,7 @@ function App() {
                     <Routes>
                       <Route path="/" element={<DivisionManagerDashboard />} />
                       <Route path="/review" element={<RegionalDirectorReview />} />
+                      <Route path="/review/:taskId" element={<DivisionManagerTaskDetail />} />
                       <Route path="/progress-oversight" element={<RegionalDirectorProgressOversight />} />
                       <Route path="/settings" element={<StaffSettings />} />
                     </Routes>
@@ -194,7 +198,8 @@ function App() {
             </ProtectedRoute>
           } />
         </Routes>
-      </BrowserRouter>
+        </BrowserRouter>
+      </DialogProvider>
     </AuthProvider>
   )
 }

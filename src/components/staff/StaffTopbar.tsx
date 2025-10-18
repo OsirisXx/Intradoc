@@ -13,6 +13,15 @@ export function StaffTopbar({ onToggleSidebar }: StaffTopbarProps) {
   const navigate = useNavigate()
   const { logout, user } = useAuth()
   const [searchQuery, setSearchQuery] = useState('')
+  const [imageKey, setImageKey] = useState(0) // Force re-render when image changes
+
+  // Force re-render when PROFILE_IMAGE changes
+  React.useEffect(() => {
+    if (user?.PROFILE_IMAGE) {
+      setImageKey(prev => prev + 1);
+    }
+  }, [user?.PROFILE_IMAGE])
+
 
   const handleLogout = () => {
     authService.logout()
@@ -84,11 +93,15 @@ export function StaffTopbar({ onToggleSidebar }: StaffTopbarProps) {
           />
         </div>
         <div className="user-avatar" title={`${user?.NAME || 'User'} (${user?.FUNCTIONAL_ROLE?.replace(/_/g, ' ') || 'STAFF'})`}>
-          {user?.PROFILE_IMAGE ? (
+          {user?.PROFILE_IMAGE && user.PROFILE_IMAGE.trim() !== '' ? (
             <img 
+              key={imageKey}
               src={user.PROFILE_IMAGE.startsWith('http') ? user.PROFILE_IMAGE : API_URL.replace(/\/api$/, '') + user.PROFILE_IMAGE} 
               alt="Profile" 
               className="user-avatar-img"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
             />
           ) : (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { useDialogContext } from '../ui/DialogProvider'
 import { apiService } from '../../services/api'
 import { DocumentViewModal } from '../common/DocumentViewModal'
 import * as Types from '../../types'
@@ -10,6 +11,7 @@ export function StaffTaskDetail() {
   const { taskId } = useParams<{ taskId: string }>()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { confirmDelete, showSuccess, showError } = useDialogContext()
   
   const [task, setTask] = useState<Types.TaskWithDetails | null>(null)
   const [taskDocuments, setTaskDocuments] = useState<Types.DocumentWithDetails[]>([])
@@ -98,7 +100,7 @@ export function StaffTaskDetail() {
     
     // Validate that at least one option is provided
     if (selectedFiles.length === 0 && !documentUrl.trim()) {
-      alert('Please provide either a file or a document URL')
+      showError('Please provide either a file or a document URL')
       return
     }
     
@@ -142,10 +144,10 @@ export function StaffTaskDetail() {
       setSelectedFiles([])
       setDocumentUrl('')
       setDescription('')
-      alert('Upload(s) completed!')
+      showSuccess('Upload(s) completed!')
     } catch (error) {
       console.error('Error uploading document:', error)
-      alert('Error uploading document')
+      showError('Error uploading document')
     } finally {
       setLoading(false)
     }
@@ -164,7 +166,7 @@ export function StaffTaskDetail() {
       await loadTaskDocuments()
     } catch (error) {
       console.error('Submit task error:', error)
-      alert((error as Error).message)
+      showError((error as Error).message)
     } finally {
       setSubmitting(false)
     }
@@ -179,7 +181,7 @@ export function StaffTaskDetail() {
       await loadTask()
       await loadTaskDocuments()
     } catch (error) {
-      alert((error as Error).message)
+      showError((error as Error).message)
     } finally {
       setSubmitting(false)
     }
@@ -188,10 +190,11 @@ export function StaffTaskDetail() {
 
   const handleDeleteAttachment = async (docId: number) => {
     if (!task) return
-    if (!confirm('Remove this attachment?')) return
+    const confirmed = await confirmDelete('this attachment')
+    if (!confirmed) return
     const response = await apiService.deleteDocument(docId)
     if (!response.success) {
-      alert(response.error || 'Failed to delete')
+      showError(response.error || 'Failed to delete')
       return
     }
     await loadTaskDocuments()

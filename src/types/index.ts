@@ -224,12 +224,14 @@ export interface User {
   PASSWORD: string;
   SECTION_ID: number;  // Users are always assigned to a SECTION
   FUNCTIONAL_ROLE: FunctionalRole;  // What they can do (staff, section_unit_head, division_manager, etc.)
-  ORGANIZATIONAL_ASSIGNMENT: OrganizationalAssignment;  // Where they work (Engineering, Planning, etc.)
+  ORGANIZATIONAL_ROLE: string;  // Where they work (Engineering, Planning, etc.)
   STATUS: 'active' | 'pending' | 'suspended' | 'inactive';
   PROFILE_IMAGE?: string;  // URL path to profile image
   CREATED_AT: string;
   APPROVED_AT?: string;
   APPROVED_BY?: number;
+  SECTION_NAME?: string;  // From JOIN with section table
+  DIVISION_NAME?: string;  // From JOIN with division table
   // New fields for enhanced features
   NOTIFICATION_PREFERENCES?: {
     email: boolean;

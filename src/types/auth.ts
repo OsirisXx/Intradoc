@@ -8,4 +8,5 @@ export interface AuthUser {
   ORGANIZATIONAL_ROLE?: string;
   SECTION_ID: number;
   STATUS: string;
+  PROFILE_IMAGE?: string;  // URL path to profile image
 }

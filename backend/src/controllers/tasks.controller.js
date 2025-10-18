@@ -376,8 +376,34 @@ exports.submitTask = async (req, res) => {
       return res.status(403).json({ success: false, error: 'You can only submit tasks assigned to you' });
     }
 
+    const task = tasks[0];
+
     // Allow submission even without attachments (for "Mark as Done" functionality)
     await pool.query('UPDATE TASK SET STATUS = "completed", UPDATED_AT = NOW() WHERE TASK_ID = ? AND ASSIGNED_TO = ?', [taskId, userId]);
+
+    // Get all documents linked to this task and set them to "Submitted" status
+    const [documents] = await pool.query(
+      'SELECT * FROM document WHERE ASSIGNED_TO = ?',
+      [taskId]
+    );
+
+    // Update document statuses to "Submitted" for review
+    for (const doc of documents) {
+      // Insert new document status
+      await pool.query(
+        'INSERT INTO document_status (DOCUMENT_ID, STATUS, REMARKS, CREATED_AT) VALUES (?, ?, ?, NOW())',
+        [doc.DOCUMENT_ID, 'Submitted', 'Task submitted for review']
+      );
+    }
+
+    // Notify Section Unit Head that task is ready for review
+    await createNotification({
+      userId: task.ASSIGNED_BY,
+      type: 'task_submitted',
+      title: 'Task Submitted for Review',
+      message: `Task "${task.TITLE}" has been submitted and is ready for review`,
+      actionUrl: `/section-unit-head/work/${task.TASK_ID}`
+    });
 
     res.json({ success: true, message: 'Task submitted' });
   } catch (error) {
@@ -504,10 +530,86 @@ exports.linkDocumentToTask = async (req, res) => {
   }
 };
 
+// Get approval history for a specific task by a specific user
+exports.getTaskApprovalHistory = async (req, res) => {
+  try {
+    const { taskId, userId } = req.params;
+
+    // Get approval history for documents in this task by the specified user
+    // Only show approvals for documents currently assigned to this specific task
+    const [approvals] = await pool.query(
+      `SELECT 
+        da.APPROVAL_ID,
+        da.DOCUMENT_ID,
+        da.USER_ID,
+        da.ROLE,
+        da.STATUS,
+        da.REMARKS,
+        da.DATE_APPROVED,
+        d.TITLE as DOCUMENT_TITLE,
+        u.NAME as APPROVER_NAME,
+        CASE 
+          WHEN da.DOCUMENT_ID < 0 THEN 'Task Approval'
+          ELSE d.TITLE 
+        END as DISPLAY_TITLE
+      FROM document_approval da
+      LEFT JOIN document d ON da.DOCUMENT_ID = d.DOCUMENT_ID
+      LEFT JOIN user u ON da.USER_ID = u.USER_ID
+      WHERE da.USER_ID = ? AND (
+        -- Show approvals for documents currently assigned to this task
+        (d.ASSIGNED_TO = ? AND d.DOCUMENT_ID > 0) OR 
+        -- Show virtual task approvals (for tasks without documents)
+        (da.DOCUMENT_ID = -? AND EXISTS (
+          SELECT 1 FROM TASK t WHERE t.TASK_ID = ? AND (t.ASSIGNED_BY = da.USER_ID OR t.ASSIGNED_TO = da.USER_ID)
+        ))
+      ) AND (
+        -- Exclude approvals for forwarded documents (documents with "(Forwarded)" in title)
+        d.TITLE NOT LIKE '%(Forwarded)%' OR d.TITLE IS NULL
+      )
+      ORDER BY da.DATE_APPROVED DESC`,
+      [userId, taskId, taskId, taskId]
+    );
+
+    console.log('Approval history query result for task', taskId, 'user', userId, ':', approvals);
+
+    res.json({
+      success: true,
+      data: approvals
+    });
+  } catch (error) {
+    console.error('Get task approval history error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch approval history for task' });
+  }
+};
+
 // Get documents linked to a specific task
 exports.getDocumentsForTask = async (req, res) => {
   try {
     const { taskId } = req.params;
+
+    // Get task details and current user info for visibility control
+    const [taskDetails] = await pool.query('SELECT STATUS, ASSIGNED_TO, ASSIGNED_BY FROM TASK WHERE TASK_ID = ?', [taskId]);
+    const task = taskDetails[0];
+    const currentUserId = req.user.userId;
+    const currentUserRole = req.user.role;
+    
+    // Determine if forwarded documents should be visible
+    const canSeeForwardedDocuments = () => {
+      if (!task) return false;
+      
+      // Section Unit Head can see forwarded documents in their own task immediately
+      if (currentUserRole === 'section_unit_head' && task.ASSIGNED_TO === currentUserId) {
+        return true; // Section Unit Head can see forwarded documents in their own task
+      }
+      
+      // Division Manager can see forwarded documents in Section Unit Head's task after it's completed
+      if (currentUserRole === 'division_manager' && task.ASSIGNED_BY === currentUserId) {
+        return task.STATUS === 'completed'; // Only after Section Unit Head submits
+      }
+      
+      // For other roles, use default behavior
+      return task.STATUS === 'completed';
+    };
 
     const [documents] = await pool.query(
       `SELECT 
@@ -519,13 +621,14 @@ exports.getDocumentsForTask = async (req, res) => {
         d.CREATED_AT,
         d.TAGS,
         creator.NAME as CREATED_BY_NAME,
+        ds.STATUS_ID,
         ds.STATUS as CURRENT_STATUS,
         ds.REMARKS as CURRENT_REMARKS,
         ds.CREATED_AT as STATUS_DATE
       FROM document d
       LEFT JOIN user creator ON d.CREATED_BY = creator.USER_ID
       LEFT JOIN (
-        SELECT DOCUMENT_ID, STATUS, REMARKS, CREATED_AT
+        SELECT STATUS_ID, DOCUMENT_ID, STATUS, REMARKS, CREATED_AT
         FROM document_status 
         WHERE STATUS_ID IN (
           SELECT MAX(STATUS_ID) 
@@ -533,18 +636,592 @@ exports.getDocumentsForTask = async (req, res) => {
           GROUP BY DOCUMENT_ID
         )
       ) ds ON d.DOCUMENT_ID = ds.DOCUMENT_ID
-      WHERE d.ASSIGNED_TO = ?
+      WHERE d.ASSIGNED_TO = ? AND (
+        -- Show all documents if user can see forwarded documents
+        ? = 1 OR 
+        -- If user cannot see forwarded documents, hide them (documents with "(Forwarded)" in title)
+        d.TITLE NOT LIKE '%(Forwarded)%'
+      )
       ORDER BY d.CREATED_AT DESC`,
-      [taskId]
+      [taskId, canSeeForwardedDocuments() ? 1 : 0]
     );
+
+    // Transform documents to match DocumentWithDetails structure
+    const transformedDocuments = documents.map(doc => ({
+      ...doc,
+      CREATED_BY_NAME: doc.CREATED_BY_NAME,
+      currentStatus: doc.CURRENT_STATUS ? {
+        STATUS_ID: doc.STATUS_ID,
+        DOCUMENT_ID: doc.DOCUMENT_ID,
+        STATUS: doc.CURRENT_STATUS,
+        REMARKS: doc.CURRENT_REMARKS,
+        CREATED_AT: doc.STATUS_DATE
+      } : null
+    }));
 
     res.json({
       success: true,
-      data: documents
+      data: transformedDocuments
     });
   } catch (error) {
     console.error('Get documents for task error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch documents for task' });
+  }
+};
+
+// Approve task documents (Section Unit Head)
+exports.approveTaskDocuments = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const { forwardToDivision, remarks } = req.body;
+    const userId = req.user.userId;
+    const userRole = req.user.role;
+
+    if (!['section_unit_head', 'division_manager'].includes(userRole)) {
+      return res.status(403).json({ success: false, error: 'Only Section Unit Heads and Division Managers can approve task documents' });
+    }
+
+    // Get task details
+    const [tasks] = await pool.query('SELECT * FROM TASK WHERE TASK_ID = ?', [taskId]);
+    if (tasks.length === 0) {
+      return res.status(404).json({ success: false, error: 'Task not found' });
+    }
+
+    const task = tasks[0];
+
+    // Check permissions based on role
+    if (userRole === 'section_unit_head' && task.ASSIGNED_BY !== userId) {
+      return res.status(403).json({ success: false, error: 'You can only approve tasks assigned by you' });
+    }
+    if (userRole === 'division_manager' && task.ASSIGNED_TO !== userId) {
+      return res.status(403).json({ success: false, error: 'You can only approve tasks assigned to you' });
+    }
+
+    // Check if user has already approved/rejected this task
+    const [existingApprovals] = await pool.query(
+      `SELECT da.APPROVAL_ID, da.STATUS 
+       FROM document_approval da
+       LEFT JOIN document d ON da.DOCUMENT_ID = d.DOCUMENT_ID
+       WHERE da.USER_ID = ? AND (
+         d.ASSIGNED_TO = ? OR 
+         (da.DOCUMENT_ID = -? AND EXISTS (
+           SELECT 1 FROM TASK t WHERE t.TASK_ID = ? AND t.ASSIGNED_BY = da.USER_ID
+         ))
+       )`,
+      [userId, taskId, taskId, taskId]
+    );
+
+    if (existingApprovals.length > 0) {
+      const hasApproved = existingApprovals.some(approval => approval.STATUS === 1);
+      const hasRejected = existingApprovals.some(approval => approval.STATUS === 0);
+      
+      if (hasApproved) {
+        return res.status(400).json({ success: false, error: 'You have already approved this task' });
+      }
+      if (hasRejected) {
+        return res.status(400).json({ success: false, error: 'You have already rejected this task' });
+      }
+    }
+
+    // Get all documents linked to this task
+    const [documents] = await pool.query(
+      'SELECT * FROM document WHERE ASSIGNED_TO = ?',
+      [taskId]
+    );
+
+    // Allow approving tasks even without documents
+    let newStatus;
+    let approvalMessage;
+    
+    if (userRole === 'section_unit_head') {
+      newStatus = forwardToDivision ? 'Under_Division_Review' : 'Approved';
+      approvalMessage = remarks || 'Approved by Section Unit Head';
+    } else if (userRole === 'division_manager') {
+      newStatus = 'Approved'; // Division Manager approval is final
+      approvalMessage = remarks || 'Approved by Division Manager';
+    }
+
+    // Update document statuses and create approval records (if documents exist)
+    for (const doc of documents) {
+      // Insert new document status
+      await pool.query(
+        'INSERT INTO document_status (DOCUMENT_ID, STATUS, REMARKS, CREATED_AT) VALUES (?, ?, ?, NOW())',
+        [doc.DOCUMENT_ID, newStatus, approvalMessage]
+      );
+
+      // Create approval record
+      await pool.query(
+        'INSERT INTO document_approval (DOCUMENT_ID, USER_ID, ROLE, STATUS, REMARKS, DATE_APPROVED) VALUES (?, ?, ?, 1, ?, NOW())',
+        [doc.DOCUMENT_ID, userId, userRole, approvalMessage]
+      );
+    }
+
+    // For tasks without documents, we need a different approach since DOCUMENT_ID cannot be NULL
+    // We'll create a special "virtual document" entry or use a different tracking mechanism
+    if (documents.length === 0) {
+      // Create a special entry in document_approval with a placeholder document_id
+      // We'll use a negative task_id as a unique identifier for document-less approvals
+      const virtualDocumentId = -parseInt(taskId); // Use negative task_id as virtual document_id
+      
+      await pool.query(
+        'INSERT INTO document_approval (DOCUMENT_ID, USER_ID, ROLE, STATUS, REMARKS, DATE_APPROVED) VALUES (?, ?, ?, 1, ?, NOW())',
+        [virtualDocumentId, userId, userRole, approvalMessage]
+      );
+    }
+
+    // Send notifications
+    await notifyTaskDocumentApproval(task, documents, newStatus, remarks, userId, userRole, forwardToDivision);
+
+    // Update message based on whether documents exist and role
+    let message;
+    if (userRole === 'section_unit_head') {
+      if (documents.length > 0) {
+        message = forwardToDivision ? 'Task documents approved and forwarded to Division Manager' : 'Task documents approved';
+      } else {
+        message = forwardToDivision ? 'Task approved and forwarded to Division Manager' : 'Task approved';
+      }
+    } else if (userRole === 'division_manager') {
+      message = documents.length > 0 ? 'Task documents approved successfully' : 'Task approved successfully';
+    }
+
+    res.json({
+      success: true,
+      message: message
+    });
+  } catch (error) {
+    console.error('Approve task documents error:', error);
+    res.status(500).json({ success: false, error: 'Failed to approve task documents' });
+  }
+};
+
+// Reject task documents
+exports.rejectTaskDocuments = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const { remarks } = req.body;
+    const userId = req.user.userId;
+    const userRole = req.user.role;
+
+    if (!['section_unit_head', 'division_manager'].includes(userRole)) {
+      return res.status(403).json({ success: false, error: 'Unauthorized to reject task documents' });
+    }
+
+    if (!remarks || remarks.trim() === '') {
+      return res.status(400).json({ success: false, error: 'Rejection remarks are required' });
+    }
+
+    // Get task details
+    const [tasks] = await pool.query('SELECT * FROM TASK WHERE TASK_ID = ?', [taskId]);
+    if (tasks.length === 0) {
+      return res.status(404).json({ success: false, error: 'Task not found' });
+    }
+
+    const task = tasks[0];
+
+    // Check permissions based on role
+    if (userRole === 'section_unit_head' && task.ASSIGNED_BY !== userId) {
+      return res.status(403).json({ success: false, error: 'You can only reject tasks assigned by you' });
+    }
+
+    // Check if user has already approved/rejected this task
+    const [existingApprovals] = await pool.query(
+      `SELECT da.APPROVAL_ID, da.STATUS 
+       FROM document_approval da
+       LEFT JOIN document d ON da.DOCUMENT_ID = d.DOCUMENT_ID
+       WHERE da.USER_ID = ? AND (
+         d.ASSIGNED_TO = ? OR 
+         (da.DOCUMENT_ID = -? AND EXISTS (
+           SELECT 1 FROM TASK t WHERE t.TASK_ID = ? AND (t.ASSIGNED_BY = da.USER_ID OR t.ASSIGNED_TO = da.USER_ID)
+         ))
+       )`,
+      [userId, taskId, taskId, taskId]
+    );
+
+    if (existingApprovals.length > 0) {
+      const hasApproved = existingApprovals.some(approval => approval.STATUS === 1);
+      const hasRejected = existingApprovals.some(approval => approval.STATUS === 0);
+      
+      if (hasApproved) {
+        return res.status(400).json({ success: false, error: 'You have already approved this task' });
+      }
+      if (hasRejected) {
+        return res.status(400).json({ success: false, error: 'You have already rejected this task' });
+      }
+    }
+
+    // Get all documents linked to this task
+    const [documents] = await pool.query(
+      'SELECT * FROM document WHERE ASSIGNED_TO = ?',
+      [taskId]
+    );
+
+    // Allow rejecting tasks even without documents (document-less rejection)
+    // Update document statuses and create rejection records (if documents exist)
+    for (const doc of documents) {
+      // Insert new document status
+      await pool.query(
+        'INSERT INTO document_status (DOCUMENT_ID, STATUS, REMARKS, CREATED_AT) VALUES (?, ?, ?, NOW())',
+        [doc.DOCUMENT_ID, 'Rejected', remarks]
+      );
+
+      // Create rejection record
+      await pool.query(
+        'INSERT INTO document_approval (DOCUMENT_ID, USER_ID, ROLE, STATUS, REMARKS, DATE_APPROVED) VALUES (?, ?, ?, 0, ?, NOW())',
+        [doc.DOCUMENT_ID, userId, userRole, remarks]
+      );
+    }
+
+    // For tasks without documents, create a special rejection record with virtual document_id
+    if (documents.length === 0) {
+      const virtualDocumentId = -parseInt(taskId); // Use negative task_id as virtual document_id
+      
+      await pool.query(
+        'INSERT INTO document_approval (DOCUMENT_ID, USER_ID, ROLE, STATUS, REMARKS, DATE_APPROVED) VALUES (?, ?, ?, 0, ?, NOW())',
+        [virtualDocumentId, userId, userRole, remarks]
+      );
+    }
+
+    // Send rejection notification to staff
+    await createNotification({
+      userId: task.ASSIGNED_TO,
+      type: 'task_rejected',
+      title: 'Task Documents Rejected',
+      message: `Your task "${task.TITLE}" documents have been rejected. Reason: ${remarks}`,
+      actionUrl: '/staff/work'
+    });
+
+    // Update message based on whether documents exist
+    let message;
+    if (documents.length > 0) {
+      message = 'Task documents rejected';
+    } else {
+      message = 'Task rejected';
+    }
+
+    res.json({
+      success: true,
+      message: message
+    });
+  } catch (error) {
+    console.error('Reject task documents error:', error);
+    res.status(500).json({ success: false, error: 'Failed to reject task documents' });
+  }
+};
+
+// Forward task to Division Manager
+exports.forwardTaskToDivisionManager = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const { remarks, targetDivisionManagerId, targetTaskId } = req.body;
+    const userId = req.user.userId;
+    const userRole = req.user.role;
+
+    if (userRole !== 'section_unit_head') {
+      return res.status(403).json({ success: false, error: 'Only Section Unit Heads can forward tasks to Division Manager' });
+    }
+
+    // Get task details
+    const [tasks] = await pool.query('SELECT * FROM TASK WHERE TASK_ID = ?', [taskId]);
+    if (tasks.length === 0) {
+      return res.status(404).json({ success: false, error: 'Task not found' });
+    }
+
+    const task = tasks[0];
+
+    // Check if user has permission
+    if (task.ASSIGNED_BY !== userId) {
+      return res.status(403).json({ success: false, error: 'You can only forward tasks assigned by you' });
+    }
+
+    // Check if user has already approved this task (required for forwarding)
+    const [existingApprovals] = await pool.query(
+      `SELECT da.APPROVAL_ID, da.STATUS 
+       FROM document_approval da
+       LEFT JOIN document d ON da.DOCUMENT_ID = d.DOCUMENT_ID
+       WHERE da.USER_ID = ? AND (
+         d.ASSIGNED_TO = ? OR 
+         (da.DOCUMENT_ID = -? AND EXISTS (
+           SELECT 1 FROM TASK t WHERE t.TASK_ID = ? AND t.ASSIGNED_BY = da.USER_ID
+         ))
+       )`,
+      [userId, taskId, taskId, taskId]
+    );
+
+    if (existingApprovals.length === 0) {
+      return res.status(400).json({ success: false, error: 'You must approve the task before forwarding' });
+    }
+
+    const hasApproved = existingApprovals.some(approval => approval.STATUS === 1);
+    if (!hasApproved) {
+      return res.status(400).json({ success: false, error: 'You must approve the task before forwarding' });
+    }
+
+    // Get all documents linked to this task
+    const [documents] = await pool.query(
+      'SELECT * FROM document WHERE ASSIGNED_TO = ?',
+      [taskId]
+    );
+
+    // Allow forwarding tasks even without documents
+
+    // Update document statuses and create approval records
+    for (const doc of documents) {
+      // Insert new document status
+      await pool.query(
+        'INSERT INTO document_status (DOCUMENT_ID, STATUS, REMARKS, CREATED_AT) VALUES (?, ?, ?, NOW())',
+        [doc.DOCUMENT_ID, 'Under_Division_Review', remarks || 'Forwarded to Division Manager']
+      );
+
+      // Create approval record
+      await pool.query(
+        'INSERT INTO document_approval (DOCUMENT_ID, USER_ID, ROLE, STATUS, REMARKS, DATE_APPROVED) VALUES (?, ?, ?, 1, ?, NOW())',
+        [doc.DOCUMENT_ID, userId, userRole, remarks || 'Forwarded to Division Manager']
+      );
+    }
+
+    // Handle notifications based on targeting
+    if (targetDivisionManagerId) {
+      // Notify specific Division Manager
+      await createNotification({
+        userId: targetDivisionManagerId,
+        type: 'task_forwarded',
+        title: 'Task Documents Forwarded',
+        message: `Task "${task.TITLE}" documents have been forwarded to you for review. ${remarks ? `Remarks: ${remarks}` : ''}`,
+        actionUrl: `/division-manager/task-assignment/${task.TASK_ID}`
+      });
+    } else if (targetTaskId) {
+      // Verify target task exists and get its details
+      const [targetTasks] = await pool.query('SELECT * FROM TASK WHERE TASK_ID = ?', [targetTaskId]);
+      if (targetTasks.length === 0) {
+        return res.status(404).json({ success: false, error: 'Target task not found' });
+      }
+
+      const targetTask = targetTasks[0];
+
+      // Copy documents to the Section Unit Head's own task (the one assigned to them by Division Manager)
+      for (const doc of documents) {
+        // Create a copy of the document for the Section Unit Head's task
+        const [newDocResult] = await pool.query(
+          `INSERT INTO document (
+            TITLE, DESCRIPTION, FILE_LINK, FINGERPRINT_HASH, 
+            CATEGORY_ID, SECTION_ID, CREATED_BY, ASSIGNED_TO,
+            TAGS, FREQUENCY
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            doc.TITLE + ' (Forwarded)',
+            doc.DESCRIPTION + (remarks ? `\n\nForwarded with remarks: ${remarks}` : ''),
+            doc.FILE_LINK,
+            doc.FINGERPRINT_HASH,
+            doc.CATEGORY_ID,
+            doc.SECTION_ID,
+            doc.CREATED_BY, // Preserve original creator
+            targetTaskId, // Assign to the Section Unit Head's task
+            doc.TAGS,
+            doc.FREQUENCY
+          ]
+        );
+
+        // Create initial status for the copied document
+        await pool.query(
+          'INSERT INTO document_status (DOCUMENT_ID, STATUS, REMARKS, CREATED_AT) VALUES (?, ?, ?, NOW())',
+          [newDocResult.insertId, 'Under_Division_Review', 'Forwarded from staff task']
+        );
+
+        // Note: We don't create approval records for forwarded documents
+        // The approval records should only exist for the original documents
+        // This prevents duplicate entries in the approval history
+      }
+
+      // Notify the Division Manager that documents have been forwarded to the Section Unit Head's task
+      await createNotification({
+        userId: targetTask.ASSIGNED_TO, // Division Manager
+        type: 'task_forwarded',
+        title: 'Task Documents Forwarded',
+        message: `Documents have been forwarded to the Section Unit Head's task "${targetTask.TITLE}". They will be available for review once the Section Unit Head submits their task. ${remarks ? `Remarks: ${remarks}` : ''}`,
+        actionUrl: `/division-manager/task-assignment/${targetTaskId}`
+      });
+    } else {
+      // Notify all Division Managers in the section's division (default behavior)
+      await notifyDivisionManagersForReview(task, documents, remarks);
+    }
+
+    // Update message based on targeting
+    let message;
+    if (targetDivisionManagerId) {
+      message = 'Task forwarded to specific Division Manager';
+    } else if (targetTaskId) {
+      message = 'Task forwarded to specific task';
+    } else {
+      message = 'Task forwarded to Division Manager';
+    }
+
+    res.json({
+      success: true,
+      message: message
+    });
+  } catch (error) {
+    console.error('Forward task to division manager error:', error);
+    res.status(500).json({ success: false, error: 'Failed to forward task to Division Manager' });
+  }
+};
+
+// Forward task to Regional Director
+exports.forwardTaskToRegional = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const { remarks } = req.body;
+    const userId = req.user.userId;
+    const userRole = req.user.role;
+
+    if (userRole !== 'division_manager') {
+      return res.status(403).json({ success: false, error: 'Only Division Managers can forward tasks to Regional Director' });
+    }
+
+    // Get task details
+    const [tasks] = await pool.query('SELECT * FROM TASK WHERE TASK_ID = ?', [taskId]);
+    if (tasks.length === 0) {
+      return res.status(404).json({ success: false, error: 'Task not found' });
+    }
+
+    const task = tasks[0];
+
+    // Check if user has already approved this task (required for forwarding)
+    const [existingApprovals] = await pool.query(
+      `SELECT da.APPROVAL_ID, da.STATUS 
+       FROM document_approval da
+       LEFT JOIN document d ON da.DOCUMENT_ID = d.DOCUMENT_ID
+       WHERE da.USER_ID = ? AND (
+         d.ASSIGNED_TO = ? OR 
+         (da.DOCUMENT_ID = -? AND EXISTS (
+           SELECT 1 FROM TASK t WHERE t.TASK_ID = ? AND (t.ASSIGNED_BY = da.USER_ID OR t.ASSIGNED_TO = da.USER_ID)
+         ))
+       )`,
+      [userId, taskId, taskId, taskId]
+    );
+
+    if (existingApprovals.length === 0) {
+      return res.status(400).json({ success: false, error: 'You must approve the task before forwarding' });
+    }
+
+    const hasApproved = existingApprovals.some(approval => approval.STATUS === 1);
+    if (!hasApproved) {
+      return res.status(400).json({ success: false, error: 'You must approve the task before forwarding' });
+    }
+
+    // Get all documents linked to this task
+    const [documents] = await pool.query(
+      'SELECT * FROM document WHERE ASSIGNED_TO = ?',
+      [taskId]
+    );
+
+    if (documents.length === 0) {
+      return res.status(400).json({ success: false, error: 'No documents found for this task' });
+    }
+
+    // Update document statuses and create approval records
+    for (const doc of documents) {
+      // Insert new document status
+      await pool.query(
+        'INSERT INTO document_status (DOCUMENT_ID, STATUS, REMARKS, CREATED_AT) VALUES (?, ?, ?, NOW())',
+        [doc.DOCUMENT_ID, 'Under_Regional_Review', remarks || 'Forwarded to Regional Director']
+      );
+
+      // Create approval record
+      await pool.query(
+        'INSERT INTO document_approval (DOCUMENT_ID, USER_ID, ROLE, STATUS, REMARKS, DATE_APPROVED) VALUES (?, ?, ?, 1, ?, NOW())',
+        [doc.DOCUMENT_ID, userId, userRole, remarks || 'Forwarded to Regional Director']
+      );
+
+      // Update document forwarding status
+      await pool.query(
+        'UPDATE document SET FORWARDED_TO_REGIONAL = 1, FORWARDED_BY = ?, FORWARDED_AT = NOW() WHERE DOCUMENT_ID = ?',
+        [userId, doc.DOCUMENT_ID]
+      );
+    }
+
+    // Notify Regional Directors
+    await notifyRegionalDirectorsForReview(task, documents, remarks);
+
+    res.json({
+      success: true,
+      message: 'Task forwarded to Regional Director'
+    });
+  } catch (error) {
+    console.error('Forward task to regional error:', error);
+    res.status(500).json({ success: false, error: 'Failed to forward task to Regional Director' });
+  }
+};
+
+// Send documents back to Section Unit Head for revision
+exports.sendBackToSectionHead = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const { remarks } = req.body;
+    const userId = req.user.userId;
+    const userRole = req.user.role;
+
+    if (userRole !== 'division_manager') {
+      return res.status(403).json({ success: false, error: 'Only Division Managers can send documents back to Section Head' });
+    }
+
+    if (!remarks || remarks.trim() === '') {
+      return res.status(400).json({ success: false, error: 'Remarks are required when sending back for revision' });
+    }
+
+    // Get task details
+    const [tasks] = await pool.query('SELECT * FROM TASK WHERE TASK_ID = ?', [taskId]);
+    if (tasks.length === 0) {
+      return res.status(404).json({ success: false, error: 'Task not found' });
+    }
+
+    const task = tasks[0];
+
+    // Get all documents linked to this task
+    const [documents] = await pool.query(
+      'SELECT * FROM document WHERE ASSIGNED_TO = ?',
+      [taskId]
+    );
+
+    // Allow sending back tasks even without documents
+    // Update document statuses and create revision records (if documents exist)
+    for (const doc of documents) {
+      // Insert new document status
+      await pool.query(
+        'INSERT INTO document_status (DOCUMENT_ID, STATUS, REMARKS, CREATED_AT) VALUES (?, ?, ?, NOW())',
+        [doc.DOCUMENT_ID, 'Revision_Required', remarks]
+      );
+
+      // Create revision record
+      await pool.query(
+        'INSERT INTO document_approval (DOCUMENT_ID, USER_ID, ROLE, STATUS, REMARKS, DATE_APPROVED) VALUES (?, ?, ?, 0, ?, NOW())',
+        [doc.DOCUMENT_ID, userId, userRole, remarks]
+      );
+    }
+
+    // Send notification to Section Unit Head
+    await createNotification({
+      userId: task.ASSIGNED_BY,
+      type: 'task_revision_required',
+      title: 'Task Requires Revision',
+      message: `Your task "${task.TITLE}" has been sent back for revision. Reason: ${remarks}`,
+      actionUrl: `/section-unit-head/work/${task.TASK_ID}`
+    });
+
+    // Update message based on whether documents exist
+    let message;
+    if (documents.length > 0) {
+      message = 'Task documents sent back to Section Unit Head for revision';
+    } else {
+      message = 'Task sent back to Section Unit Head for revision';
+    }
+
+    res.json({
+      success: true,
+      message: message
+    });
+  } catch (error) {
+    console.error('Send back to section head error:', error);
+    res.status(500).json({ success: false, error: 'Failed to send back to Section Unit Head' });
   }
 };
 
@@ -558,5 +1235,92 @@ async function createNotification({ userId, type, title, message, actionUrl }) {
     );
   } catch (error) {
     console.error('Create notification error:', error);
+  }
+}
+
+// Helper function to notify task document approval
+async function notifyTaskDocumentApproval(task, documents, newStatus, remarks, approverId, approverRole, forwardToDivision) {
+  try {
+    // Notify staff that their task was approved
+    let message;
+    if (forwardToDivision) {
+      message = `Your task "${task.TITLE}" has been approved and forwarded to Division Manager`;
+    } else {
+      message = `Your task "${task.TITLE}" has been approved`;
+    }
+
+    if (remarks) {
+      message += `. Remarks: ${remarks}`;
+    }
+
+    await createNotification({
+      userId: task.ASSIGNED_TO,
+      type: 'task_approved',
+      title: 'Task Approved',
+      message: message,
+      actionUrl: '/staff/work'
+    });
+
+    // If forwarded to division, notify division managers
+    if (forwardToDivision) {
+      await notifyDivisionManagersForReview(task, documents, remarks);
+    }
+  } catch (error) {
+    console.error('Notify task document approval error:', error);
+  }
+}
+
+// Helper function to notify division managers for review
+async function notifyDivisionManagersForReview(task, documents, remarks) {
+  try {
+    // Get section head's section to find division
+    const [sections] = await pool.query(
+      'SELECT s.SECTION_ID, s.DIVISION_ID FROM section s JOIN user u ON s.SECTION_ID = u.SECTION_ID WHERE u.USER_ID = ?',
+      [task.ASSIGNED_BY]
+    );
+
+    if (sections.length > 0) {
+      const divisionId = sections[0].DIVISION_ID;
+
+      // Get division managers
+      const [divisionManagers] = await pool.query(
+        'SELECT USER_ID FROM user WHERE FUNCTIONAL_ROLE = "division_manager" AND SECTION_ID IN (SELECT SECTION_ID FROM section WHERE DIVISION_ID = ?)',
+        [divisionId]
+      );
+
+      for (const manager of divisionManagers) {
+        await createNotification({
+          userId: manager.USER_ID,
+          type: 'task_requires_review',
+          title: 'Task Documents Require Review',
+          message: `Task "${task.TITLE}" documents require your review`,
+          actionUrl: `/division-manager/task-assignment/${task.TASK_ID}`
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Notify division managers error:', error);
+  }
+}
+
+// Helper function to notify regional directors for review
+async function notifyRegionalDirectorsForReview(task, documents, remarks) {
+  try {
+    // Get all regional directors
+    const [regionalDirectors] = await pool.query(
+      'SELECT USER_ID FROM user WHERE FUNCTIONAL_ROLE = "regional_director"'
+    );
+
+    for (const director of regionalDirectors) {
+      await createNotification({
+        userId: director.USER_ID,
+        type: 'task_requires_review',
+        title: 'Task Documents Require Review',
+        message: `Task "${task.TITLE}" documents require your review`,
+        actionUrl: `/regional-director/review/${task.TASK_ID}`
+      });
+    }
+  } catch (error) {
+    console.error('Notify regional directors error:', error);
   }
 }

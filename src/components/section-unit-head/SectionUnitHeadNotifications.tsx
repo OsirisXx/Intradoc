@@ -80,6 +80,8 @@ const SectionUnitHeadNotifications: React.FC = () => {
     const iconMap: { [key: string]: string } = {
       task_assigned: '📋',
       task_completed: '✅',
+      task_submitted: '📤',
+      task_requires_review: '👀',
       document_approved: '📄',
       document_rejected: '❌',
       revision_required: '🔄',
@@ -97,6 +99,8 @@ const SectionUnitHeadNotifications: React.FC = () => {
     const colorMap: { [key: string]: string } = {
       task_assigned: '#3b82f6',
       task_completed: '#10b981',
+      task_submitted: '#8b5cf6',
+      task_requires_review: '#f59e0b',
       document_approved: '#10b981',
       document_rejected: '#ef4444',
       revision_required: '#f59e0b',
@@ -114,6 +118,8 @@ const SectionUnitHeadNotifications: React.FC = () => {
     const labelMap: { [key: string]: string } = {
       task_assigned: 'New Task',
       task_completed: 'Task Done',
+      task_submitted: 'Task Submitted',
+      task_requires_review: 'Needs Review',
       document_approved: 'Document OK',
       document_rejected: 'Needs Fix',
       revision_required: 'Revise Doc',
@@ -329,6 +335,8 @@ const SectionUnitHeadNotifications: React.FC = () => {
                 <option value="all">All Types</option>
                 <option value="task_assigned">Task Assigned</option>
                 <option value="task_completed">Task Completed</option>
+                <option value="task_submitted">Task Submitted</option>
+                <option value="task_requires_review">Task Requires Review</option>
                 <option value="document_approved">Document Approved</option>
                 <option value="document_rejected">Document Rejected</option>
                 <option value="revision_required">Revision Required</option>

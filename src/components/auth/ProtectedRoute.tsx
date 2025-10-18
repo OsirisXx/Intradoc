@@ -55,11 +55,11 @@ const getRoleRedirectPath = (role: FunctionalRole): string => {
     case 'staff':
       return '/staff';
     case 'section_unit_head':
-      return '/section-unit-head/task-assignment';
+      return '/section-unit-head';
     case 'division_manager':
-      return '/division-manager/review';
+      return '/division-manager';
     case 'regional_director':
-      return '/regional-director/review';
+      return '/regional-director';
     default:
       return '/staff';
   }

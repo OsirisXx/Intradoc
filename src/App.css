@@ -959,6 +959,218 @@ body {
   pointer-events: none;
 }
 
+/* Custom Confirmation and Alert Dialog Styles */
+.confirmation-dialog-overlay,
+.alert-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(4px);
+  animation: dialog-overlay-fade-in 0.2s ease-out;
+}
+
+.confirmation-dialog,
+.alert-dialog {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow: hidden;
+  animation: dialog-slide-in 0.3s ease-out;
+}
+
+.confirmation-dialog-header,
+.alert-dialog-header {
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: white;
+  position: relative;
+}
+
+.confirmation-dialog-icon,
+.alert-dialog-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.confirmation-dialog-title,
+.alert-dialog-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.alert-dialog-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.alert-dialog-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.confirmation-dialog-body,
+.alert-dialog-body {
+  padding: 24px;
+}
+
+.confirmation-dialog-message,
+.alert-dialog-message {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: #374151;
+}
+
+.confirmation-dialog-footer,
+.alert-dialog-footer {
+  padding: 0 24px 24px 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.confirmation-dialog-btn,
+.alert-dialog-btn {
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 14px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 80px;
+}
+
+.confirmation-dialog-btn-cancel {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.confirmation-dialog-btn-cancel:hover:not(:disabled) {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+}
+
+.confirmation-dialog-btn-confirm,
+.alert-dialog-btn {
+  background: #3b82f6;
+  color: white;
+}
+
+.confirmation-dialog-btn-confirm:hover:not(:disabled),
+.alert-dialog-btn:hover {
+  background: #2563eb;
+}
+
+.confirmation-dialog-btn:disabled,
+.alert-dialog-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.confirmation-dialog-spinner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.confirmation-dialog-spinner .spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes dialog-overlay-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialog-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 640px) {
+  .confirmation-dialog,
+  .alert-dialog {
+    width: 95%;
+    margin: 16px;
+  }
+  
+  .confirmation-dialog-header,
+  .alert-dialog-header {
+    padding: 20px;
+  }
+  
+  .confirmation-dialog-body,
+  .alert-dialog-body {
+    padding: 20px;
+  }
+  
+  .confirmation-dialog-footer,
+  .alert-dialog-footer {
+    padding: 0 20px 20px 20px;
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+  
+  .confirmation-dialog-btn,
+  .alert-dialog-btn {
+    width: 100%;
+  }
+}
+
 /* Status indicator for documents */
 .document-status-indicator {
   display: inline-flex;

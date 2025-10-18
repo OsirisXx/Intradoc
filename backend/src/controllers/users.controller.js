@@ -304,6 +304,49 @@ exports.uploadProfileImage = [profileUpload.single('profileImage'), async (req, 
   }
 }];
 
+// Get Division Managers by division ID or section ID
+exports.getDivisionManagers = async (req, res) => {
+  try {
+    const { divisionId } = req.params;
+    let actualDivisionId = divisionId;
+
+    // Check if the parameter is actually a section ID by looking up the division
+    const [sections] = await pool.query(
+      'SELECT DIVISION_ID FROM section WHERE SECTION_ID = ?',
+      [divisionId]
+    );
+
+    if (sections.length > 0) {
+      // Parameter is a section ID, use its division ID
+      actualDivisionId = sections[0].DIVISION_ID;
+    }
+
+    const [divisionManagers] = await pool.query(`
+      SELECT 
+        u.USER_ID,
+        u.NAME,
+        u.EMAIL,
+        u.FUNCTIONAL_ROLE,
+        u.SECTION_ID,
+        s.NAME as SECTION_NAME
+      FROM user u
+      LEFT JOIN section s ON u.SECTION_ID = s.SECTION_ID
+      WHERE u.FUNCTIONAL_ROLE = 'division_manager' 
+        AND s.DIVISION_ID = ?
+        AND u.STATUS = 'active'
+      ORDER BY u.NAME ASC
+    `, [actualDivisionId]);
+
+    res.json({
+      success: true,
+      data: divisionManagers
+    });
+  } catch (error) {
+    console.error('Get division managers error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch division managers' });
+  }
+};
+
 // Export multer middleware
 exports.profileUpload = profileUpload;
 

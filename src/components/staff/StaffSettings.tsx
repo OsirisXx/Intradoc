@@ -2,26 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiService } from '../../services/api';
 import { API_URL } from '../../services/apiClient';
+import type { User } from '../../types';
 import './StaffSettings.css';
-
-interface UserProfile {
-  USER_ID: number;
-  NAME: string;
-  ID_NUMBER: string;
-  EMAIL: string;
-  FUNCTIONAL_ROLE: string;
-  ORGANIZATIONAL_ROLE: string;
-  SECTION_ID: number;
-  SECTION_NAME: string;
-  DIVISION_NAME: string;
-  STATUS: string;
-  PROFILE_IMAGE?: string;
-  CREATED_AT: string;
-}
 
 export function StaffSettings() {
   const { user, updateUser } = useAuth();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profile, setProfile] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -186,8 +172,10 @@ export function StaffSettings() {
             ...user,
             PROFILE_IMAGE: response.data.imagePath
           });
+          fetchProfile(); // Refresh profile data
+        } else {
+          fetchProfile(); // Refresh profile data
         }
-        fetchProfile(); // Refresh profile data
       } else {
         setMessage({ type: 'error', text: response.error || 'Failed to upload image' });
       }
