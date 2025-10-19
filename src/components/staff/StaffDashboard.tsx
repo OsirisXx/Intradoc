@@ -10,6 +10,7 @@ export function StaffDashboard() {
   const [notifications, setNotifications] = useState<Types.TaskNotificationWithDetails[]>([])
   const [tasks, setTasks] = useState<any[]>([])
   const [streamPosts, setStreamPosts] = useState<Types.StreamPost[]>([])
+  const [documentProgress, setDocumentProgress] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedPost, setSelectedPost] = useState<Types.StreamPost | null>(null)
 
@@ -22,11 +23,12 @@ export function StaffDashboard() {
   const loadDashboardData = async () => {
     try {
       setLoading(true)
-      const [documentsRes, notificationsRes, tasksRes, postsRes] = await Promise.all([
+      const [documentsRes, notificationsRes, tasksRes, postsRes, progressRes] = await Promise.all([
         apiService.getDocuments(user?.USER_ID || 0),
         apiService.getNotifications(user?.USER_ID || 0),
         apiService.getTasksAssignedTo(user?.USER_ID || 0),
-        apiService.getAllPosts()
+        apiService.getAllPosts(),
+        apiService.getDocumentProgress(user?.USER_ID || 0)
       ])
 
       if (documentsRes.success) {
@@ -49,6 +51,10 @@ export function StaffDashboard() {
 
       if (postsRes.success) {
         setStreamPosts(postsRes.data?.slice(0, 5) || []) // Show latest 5 posts
+      }
+
+      if (progressRes.success) {
+        setDocumentProgress(progressRes.data || [])
       }
     } catch (error) {
       console.error('Error loading dashboard data:', error)
@@ -110,6 +116,27 @@ export function StaffDashboard() {
         return <span className="priority-badge low">LOW</span>
       default:
         return <span className="priority-badge medium">{priority.toUpperCase()}</span>
+    }
+  }
+
+  const getNextStepRole = (status: string) => {
+    switch (status) {
+      case 'Submitted':
+      case 'Under_Section_Review':
+        return 'Section Unit Head'
+      case 'Under_Division_Review':
+        return 'Division Manager'
+      case 'Under_Regional_Review':
+        return 'Regional Director'
+      case 'Approved':
+      case 'Archived':
+        return 'Completed'
+      case 'Rejected':
+        return 'None'
+      case 'Revision_Required':
+        return 'Resubmit Required'
+      default:
+        return 'Unknown'
     }
   }
 
@@ -177,7 +204,7 @@ export function StaffDashboard() {
               )}
             </div>
           </div>
-          
+
           {/* Right Column - Stream Posts */}
           <div className="stream-posts-section">
             <div className="section-title-bar">
@@ -282,6 +309,61 @@ export function StaffDashboard() {
               </div>
             </div>
           )}
+
+          {/* Document Progress Section - Full Width */}
+          <div className="document-status-section" style={{ gridColumn: '1 / -1', width: '100%' }}>
+            <div className="section-title-bar">
+              <h2>DOCUMENT PROGRESS</h2>
+            </div>
+            <div className="document-status-content">
+              {loading ? (
+                <div className="empty-state">Loading...</div>
+              ) : documentProgress.length === 0 ? (
+                <div className="empty-state">No documents uploaded yet</div>
+              ) : (
+                <table className="document-status-table" style={{ width: '100%', tableLayout: 'fixed' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '30%', textAlign: 'left' }}>DOCUMENT</th>
+                      <th style={{ width: '20%', textAlign: 'center' }}>CURRENT STATUS</th>
+                      <th style={{ width: '20%', textAlign: 'center' }}>NEXT STEP</th>
+                      <th style={{ width: '15%', textAlign: 'center' }}>DEPARTMENT</th>
+                      <th style={{ width: '15%', textAlign: 'center' }}>LAST UPDATED</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {documentProgress.map(doc => (
+                      <tr key={doc.DOCUMENT_ID}>
+                        <td style={{ textAlign: 'left', padding: '12px 8px' }}>
+                          <div className="document-title" style={{ fontWeight: '500', marginBottom: '4px' }}>{doc.TITLE}</div>
+                        </td>
+                        <td style={{ textAlign: 'center', padding: '12px 8px' }}>
+                          {getStatusBadge(doc.CURRENT_STATUS || 'Submitted')}
+                        </td>
+                        <td style={{ textAlign: 'center', padding: '12px 8px' }}>
+                          <span className="next-step" style={{ 
+                            fontSize: '0.875rem', 
+                            fontWeight: '500',
+                            color: '#374151'
+                          }}>{getNextStepRole(doc.CURRENT_STATUS)}</span>
+                        </td>
+                        <td style={{ textAlign: 'center', padding: '12px 8px' }}>
+                          <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                            {doc.SECTION_NAME || 'Unknown'}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'center', padding: '12px 8px' }}>
+                          <div className="document-date" style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                            {doc.LAST_UPDATED ? formatDate(doc.LAST_UPDATED) : 'N/A'}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

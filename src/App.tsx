@@ -55,8 +55,6 @@ import DivisionManagerNotifications from './components/division-manager/Division
 import DivisionManagerTaskDetail from './components/division-manager/DivisionManagerTaskDetail.tsx'
 
 // Regional Director components
-import { RegionalDirectorProgressOversight } from './components/regional-director/RegionalDirectorProgressOversight'
-import { RegionalDirectorReview } from './components/regional-director/RegionalDirectorReview'
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = React.useState(true)
@@ -187,9 +185,8 @@ function App() {
                   <div className="content">
                     <Routes>
                       <Route path="/" element={<DivisionManagerDashboard />} />
-                      <Route path="/review" element={<RegionalDirectorReview />} />
-                      <Route path="/review/:taskId" element={<DivisionManagerTaskDetail />} />
-                      <Route path="/progress-oversight" element={<RegionalDirectorProgressOversight />} />
+                      <Route path="/reports" element={<SectionUnitHeadReports />} />
+                      <Route path="/notifications" element={<DivisionManagerNotifications />} />
                       <Route path="/settings" element={<StaffSettings />} />
                     </Routes>
                   </div>

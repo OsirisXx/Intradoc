@@ -1,6 +1,65 @@
+import { useState, useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
+import { useAuth } from '../../contexts/AuthContext'
+import { apiService } from '../../services/api'
 
 export function DivisionManagerSidebar() {
+  const { user } = useAuth()
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    if (user) {
+      loadUnreadCount()
+    }
+  }, [user])
+
+  // Refresh unread count when page becomes visible (user navigates back)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && user) {
+        loadUnreadCount()
+      }
+    }
+
+    // Also refresh when user navigates to/from notifications page
+    const handleRouteChange = () => {
+      if (user) {
+        loadUnreadCount()
+      }
+    }
+
+    // Listen for custom event when notifications are updated
+    const handleNotificationsUpdated = () => {
+      console.log('Received notificationsUpdated event') // Debug log
+      if (user) {
+        loadUnreadCount()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('popstate', handleRouteChange)
+    window.addEventListener('notificationsUpdated', handleNotificationsUpdated)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('popstate', handleRouteChange)
+      window.removeEventListener('notificationsUpdated', handleNotificationsUpdated)
+    }
+  }, [user])
+
+  const loadUnreadCount = async () => {
+    try {
+      const response = await apiService.getNotifications(user?.USER_ID || 0)
+      if (response.success) {
+        const unread = response.data?.filter(n => !n.IS_READ).length || 0
+        setUnreadCount(unread)
+        console.log('Loaded unread count:', unread) // Debug log
+      }
+    } catch (error) {
+      console.error('Error loading unread count:', error)
+    }
+  }
+
   return (
     <aside className="sidebar">
       <div className="brand">IntraDoc</div>
@@ -38,10 +97,31 @@ export function DivisionManagerSidebar() {
           Task Assignment
         </NavLink>
         <NavLink to="/division-manager/notifications" className="nav-link">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-          </svg>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            {unreadCount > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: '-8px',
+                right: '-8px',
+                backgroundColor: '#ef4444',
+                color: 'white',
+                borderRadius: '50%',
+                width: '18px',
+                height: '18px',
+                fontSize: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 'bold'
+              }}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </div>
           Notifications
         </NavLink>
 

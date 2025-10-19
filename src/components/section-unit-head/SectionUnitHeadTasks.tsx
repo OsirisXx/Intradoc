@@ -129,6 +129,11 @@ const SectionUnitHeadTasks: React.FC = () => {
     if (!user) return;
     
     // Validate required fields
+    if (!taskForm.assignedTo || taskForm.assignedTo === 0) {
+      alert('Please select someone to assign the task to.');
+      return;
+    }
+    
     if (!taskForm.dueDateTime) {
       alert('Please select a due date and time.');
       return;
@@ -151,17 +156,7 @@ const SectionUnitHeadTasks: React.FC = () => {
         sectionId: user.SECTION_ID, // Add the missing sectionId field
       });
 
-      // Create notification for assigned user
-      const assignedUser = [...heads, ...staff].find(s => s.USER_ID === taskForm.assignedTo);
-      if (assignedUser) {
-        await apiService.createNotification({
-          userId: taskForm.assignedTo,
-          type: 'task_assigned',
-          title: 'New Task Assigned',
-          message: `${user.NAME} assigned you a new task: "${taskForm.title}"`,
-          actionUrl: '/staff/tasks',
-        });
-      }
+      // Note: Notification is automatically created by the backend when task is created
 
       // Reset form and close modal
       setTaskForm({
@@ -183,6 +178,25 @@ const SectionUnitHeadTasks: React.FC = () => {
     } catch (error) {
       console.error('Error creating task:', error);
       alert('Failed to create task. Please try again.');
+    }
+  };
+
+  const handleDeleteTask = async (taskId: number, taskTitle: string) => {
+    if (!confirm(`Are you sure you want to delete "${taskTitle}"? This will also delete all linked documents and cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      const response = await apiService.deleteTask(taskId);
+      if (response.success) {
+        await loadTasks();
+        alert('Task deleted successfully!');
+      } else {
+        alert(response.error || 'Failed to delete task');
+      }
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      alert('Failed to delete task. Please try again.');
     }
   };
 
@@ -735,6 +749,20 @@ const SectionUnitHeadTasks: React.FC = () => {
                       View Submission
                     </button>
                     
+                    {activeTab === 'assignedBy' && (
+                      <button
+                        onClick={() => handleDeleteTask(task.TASK_ID, task.TITLE)}
+                        className="btn btn-danger btn-xs"
+                        style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="3,6 5,6 21,6"/>
+                          <path d="M19,6v14a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6m3,0V4a2,2,0,0,1,2-2h4a2,2,0,0,1,2,2V6"/>
+                        </svg>
+                        Delete
+                      </button>
+                    )}
+                    
                     {task.STATUS === 'pending' && (
                       <button
                         onClick={() => handleStatusUpdate(task.TASK_ID, 'in_progress')}
@@ -817,6 +845,16 @@ const SectionUnitHeadTasks: React.FC = () => {
                     View Submission
                   </button>
                   
+                  {activeTab === 'assignedBy' && (
+                    <button
+                      onClick={() => handleDeleteTask(task.TASK_ID, task.TITLE)}
+                      className="btn btn-danger btn-xs"
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
+                    >
+                      Delete
+                    </button>
+                  )}
+                  
                   {task.STATUS === 'pending' && (
                     <button
                       onClick={() => handleStatusUpdate(task.TASK_ID, 'in_progress')}
@@ -883,57 +921,55 @@ const SectionUnitHeadTasks: React.FC = () => {
                   />
                 </div>
 
-                <div className="form-row">
-                  <div className="form-group">
-                    <label htmlFor="assignee">Assign to *</label>
-                    <select
-                      id="assignee"
-                      value={taskForm.assignedTo}
-                      onChange={(e) => setTaskForm(prev => ({ ...prev, assignedTo: parseInt(e.target.value) }))}
-                      required
-                    >
-                      <option value={0}>{isDivisionManager ? 'Select member...' : 'Select staff member...'}</option>
-                      {isDivisionManager ? (
-                        <>
-                          {heads.length > 0 && (
-                            <optgroup label="Section/Unit Heads">
-                              {heads.map(member => (
-                                <option key={`head-${member.USER_ID}`} value={member.USER_ID}>
-                                  {member.NAME} ({member.ORGANIZATIONAL_ASSIGNMENT || 'Section/Unit Head'})
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
-                          {staff.length > 0 && (
-                            <optgroup label="Staff">
-                              {staff.map(member => (
-                                <option key={`staff-${member.USER_ID}`} value={member.USER_ID}>
-                                  {member.NAME} ({member.ORGANIZATIONAL_ASSIGNMENT || 'Staff'})
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
-                        </>
-                      ) : (
-                        staff.map(member => (
-                          <option key={member.USER_ID} value={member.USER_ID}>
-                            {member.NAME} ({member.ORGANIZATIONAL_ASSIGNMENT})
-                          </option>
-                        ))
-                      )}
-                    </select>
-                  </div>
+                <div className="form-group">
+                  <label htmlFor="assignee">Assign to *</label>
+                  <select
+                    id="assignee"
+                    value={taskForm.assignedTo}
+                    onChange={(e) => setTaskForm(prev => ({ ...prev, assignedTo: parseInt(e.target.value) }))}
+                    required
+                  >
+                    <option value={0}>{isDivisionManager ? 'Select member...' : 'Select staff member...'}</option>
+                    {isDivisionManager ? (
+                      <>
+                        {heads.length > 0 && (
+                          <optgroup label="Section/Unit Heads">
+                            {heads.map(member => (
+                              <option key={`head-${member.USER_ID}`} value={member.USER_ID}>
+                                {member.NAME} ({member.ORGANIZATIONAL_ROLE || 'Section/Unit Head'})
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {staff.length > 0 && (
+                          <optgroup label="Staff">
+                            {staff.map(member => (
+                              <option key={`staff-${member.USER_ID}`} value={member.USER_ID}>
+                                {member.NAME} ({member.ORGANIZATIONAL_ROLE || 'Staff'})
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </>
+                    ) : (
+                      staff.map(member => (
+                        <option key={member.USER_ID} value={member.USER_ID}>
+                          {member.NAME} ({member.ORGANIZATIONAL_ROLE})
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
 
-                  <div className="form-group">
-                    <DateTimePicker
-                      id="due-datetime"
-                      label="Due Date & Time"
-                      value={taskForm.dueDateTime}
-                      onChange={(value) => setTaskForm(prev => ({ ...prev, dueDateTime: value }))}
-                      required
-                      min={new Date().toISOString().slice(0, 16)}
-                    />
-                  </div>
+                <div className="form-group">
+                  <DateTimePicker
+                    id="due-datetime"
+                    label="Due Date & Time"
+                    value={taskForm.dueDateTime}
+                    onChange={(value) => setTaskForm(prev => ({ ...prev, dueDateTime: value }))}
+                    required
+                    min={new Date().toISOString().slice(0, 16)}
+                  />
                 </div>
 
                 <div className="form-row">

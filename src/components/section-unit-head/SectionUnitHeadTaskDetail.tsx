@@ -143,6 +143,18 @@ export default function SectionUnitHeadTaskDetail() {
     setSelectedDocument(null)
   }
 
+  const handleDeleteDocument = async (documentId: number, title: string) => {
+    if (!user) return
+    if (!confirm(`Delete "${title}"? This cannot be undone.`)) return
+    try {
+      const resp = await apiService.deleteDocument(documentId)
+      if (!resp.success) throw new Error(resp.error || 'Failed to delete')
+      await loadTaskDocuments()
+    } catch (e) {
+      alert((e as Error).message)
+    }
+  }
+
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || [])
     setSelectedFiles(prev => [...prev, ...files])
@@ -306,13 +318,13 @@ export default function SectionUnitHeadTaskDetail() {
       let response
       if (forwardTarget === 'division') {
         // Forward to specific Division Manager
-        response = await apiService.forwardTaskToDivisionManager(task.TASK_ID, forwardRemarks, selectedDivisionManager)
+        response = await apiService.forwardTaskToDivisionManager(task.TASK_ID, forwardRemarks, selectedDivisionManager || undefined)
       } else if (forwardTarget === 'task') {
         // Forward to specific task
-        response = await apiService.forwardTaskToDivisionManager(task.TASK_ID, forwardRemarks, null, selectedTask)
+        response = await apiService.forwardTaskToDivisionManager(task.TASK_ID, forwardRemarks, undefined, selectedTask || undefined)
       }
       
-      if (!response.success) throw new Error(response.error || 'Failed to forward task')
+      if (!response?.success) throw new Error(response?.error || 'Failed to forward task')
       
       // Show success message with details
       const successMessage = forwardTarget === 'task' 
@@ -412,19 +424,6 @@ export default function SectionUnitHeadTaskDetail() {
     return canForward
   }
 
-  // Helper function to check if Section Unit Head's own task is completed
-  const sectionHeadTaskCompleted = () => {
-    if (!user) return false
-    
-    // Check if the current user (Section Unit Head) has any tasks assigned to them
-    // that are not completed yet
-    // This is a simplified check - in a real scenario, you might want to check
-    // if the Section Unit Head's own task is completed and approved by their supervisor
-    
-    // For now, we'll allow forwarding if the staff task is completed and approved
-    // In a real workflow, you might want to add additional checks here
-    return true
-  }
 
   // Helper function to get document status badge
   const getDocumentStatusBadge = (status: string) => {
@@ -770,6 +769,16 @@ export default function SectionUnitHeadTaskDetail() {
                       >
                         View
                       </button>
+                      {((task as any).ASSIGNED_TO === user?.USER_ID) && task.STATUS !== 'completed' && (doc as any).CREATED_BY === user?.USER_ID && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDocument(doc.DOCUMENT_ID, doc.TITLE)}
+                          className="btn btn-danger"
+                          style={{ marginLeft: '8px' }}
+                        >
+                          Delete
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -818,7 +827,7 @@ export default function SectionUnitHeadTaskDetail() {
                         <div className="document-info">
                           <div className="document-title">{doc.TITLE}</div>
                           <div className="document-meta">
-                            Uploaded by: {doc.CREATED_BY_NAME || 'Unknown'} • 
+                            Uploaded by: {(doc as any).CREATED_BY_NAME || 'Unknown'} • 
                             Size: {doc.FILE_LINK ? 'Available' : 'N/A'}
                           </div>
                         </div>

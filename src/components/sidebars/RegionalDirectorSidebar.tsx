@@ -16,23 +16,23 @@ export function RegionalDirectorSidebar() {
           Home
         </NavLink>
         
-        <NavLink to="/regional-director/review" className="nav-link">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14,2 14,8 20,8"/>
-            <line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
-            <polyline points="10,9 9,9 8,9"/>
-          </svg>
-          Review & Archive
-        </NavLink>
         
-        <NavLink to="/regional-director/progress-oversight" className="nav-link">
+
+        <NavLink to="/regional-director/reports" className="nav-link">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M3 3v18h18"/>
-            <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/>
+            <path d="M3 3h18v18H3z"/>
+            <path d="M7 7h10v4H7z"/>
+            <path d="M7 13h10v4H7z"/>
           </svg>
-          Progress Oversight
+          Reports
+        </NavLink>
+
+        <NavLink to="/regional-director/notifications" className="nav-link">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          Notifications
         </NavLink>
         
         <NavLink to="/regional-director/settings" className="nav-link">

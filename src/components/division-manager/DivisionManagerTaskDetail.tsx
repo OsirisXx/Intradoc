@@ -21,17 +21,12 @@ export default function DivisionManagerTaskDetail() {
   // Task review state
   const [reviewRemarks, setReviewRemarks] = useState('')
   const [processingReview, setProcessingReview] = useState(false)
-  // Approval history for the current user
-  const [approvalHistory, setApprovalHistory] = useState<any[]>([])
-  // Local flag: set to true immediately after a successful approval when there are no documents
-  const [approvedNoDocs, setApprovedNoDocs] = useState(false)
-  
-  // Forward modal state
   const [showForwardModal, setShowForwardModal] = useState(false)
   const [forwardRemarks, setForwardRemarks] = useState('')
-  const [selectedDivisionManager, setSelectedDivisionManager] = useState<number | null>(null)
-  const [divisionManagers, setDivisionManagers] = useState<any[]>([])
-  const [forwardTarget, setForwardTarget] = useState<'regional' | 'division' | 'section' | null>(null)
+  // Local flag: set to true immediately after a successful approval when there are no documents
+  const [approvedNoDocs, setApprovedNoDocs] = useState(false)
+  // Approval history for the current user
+  const [approvalHistory, setApprovalHistory] = useState<any[]>([])
 
   useEffect(() => {
     if (taskId && user) {
@@ -98,19 +93,6 @@ export default function DivisionManagerTaskDetail() {
     }
   }
 
-  const loadDivisionManagers = async () => {
-    if (!user?.SECTION_ID) return
-    try {
-      // Backend now handles both division ID and section ID
-      const response = await apiService.getDivisionManagers(user.SECTION_ID)
-      if (response.success) {
-        setDivisionManagers(response.data || [])
-      }
-    } catch (error) {
-      console.error('Error loading division managers:', error)
-    }
-  }
-
   const handleViewDocument = (document: Types.DocumentWithDetails) => {
     setSelectedDocument({
       id: document.DOCUMENT_ID,
@@ -131,6 +113,80 @@ export default function DivisionManagerTaskDetail() {
       day: 'numeric',
       year: 'numeric'
     })
+  }
+
+  // Task review handlers
+  const handleApproveTask = async () => {
+    if (!task) return
+    
+    try {
+      setProcessingReview(true)
+      const response = await apiService.approveTaskDocuments(task.TASK_ID, false, reviewRemarks)
+      
+      if (!response.success) throw new Error(response.error || 'Failed to approve task')
+      
+      alert('Task documents approved successfully!')
+      setReviewRemarks('')
+      // If there are no documents, mark as approved locally so Forward section can appear
+      if (taskDocuments.length === 0) {
+        setApprovedNoDocs(true)
+      }
+      
+      // Add a small delay to ensure backend has finished updating
+      setTimeout(async () => {
+        await loadTask()
+        await loadTaskDocuments()
+        await loadApprovalHistory()
+      }, 500)
+    } catch (error) {
+      console.error('Approval error:', error)
+      alert((error as Error).message)
+    } finally {
+      setProcessingReview(false)
+    }
+  }
+
+  const handleRejectTask = async () => {
+    if (!task) return
+    if (!reviewRemarks.trim()) {
+      alert('Please provide remarks for rejection')
+      return
+    }
+    try {
+      setProcessingReview(true)
+      const response = await apiService.rejectTaskDocuments(task.TASK_ID, reviewRemarks)
+      if (!response.success) throw new Error(response.error || 'Failed to reject task')
+      
+      alert('Task documents rejected')
+      setReviewRemarks('')
+      await loadTask()
+      await loadTaskDocuments()
+      await loadApprovalHistory()
+    } catch (error) {
+      alert((error as Error).message)
+    } finally {
+      setProcessingReview(false)
+    }
+  }
+
+  const handleForwardToRegional = async () => {
+    if (!task) return
+    try {
+      setProcessingReview(true)
+      const response = await apiService.forwardTaskToRegional(task.TASK_ID, forwardRemarks)
+      if (!response.success) throw new Error(response.error || 'Failed to forward task')
+      
+      alert('Task forwarded to Regional Director!')
+      setForwardRemarks('')
+      setShowForwardModal(false)
+      await loadTask()
+      await loadTaskDocuments()
+      await loadApprovalHistory()
+    } catch (error) {
+      alert((error as Error).message)
+    } finally {
+      setProcessingReview(false)
+    }
   }
 
   // Helper function to check if user has already approved this task
@@ -158,16 +214,20 @@ export default function DivisionManagerTaskDetail() {
       return false
     }
     
-    // Check if any documents have "Under_Division_Review" status
-    const hasDocumentsUnderReview = taskDocuments.some(doc => doc.currentStatus?.STATUS === 'Under_Division_Review')
-    
-    // Don't show review section if user has already taken action
-    if (hasUserAlreadyApproved() || hasUserAlreadyRejected()) {
+    // Division Manager should review tasks that were assigned BY them
+    // (i.e., where they are ASSIGNED_BY - tasks they assigned to section heads)
+    if ((task as any).ASSIGNED_BY !== user.USER_ID) {
       return false
     }
     
-    // Show review section if documents need review
-    return hasDocumentsUnderReview
+    // Don't show review section if user has already approved
+    if (hasUserAlreadyApproved()) {
+      return false
+    }
+    
+    // Show review section for any completed task assigned BY the division manager
+    // This allows reviewing tasks even without documents
+    return true
   }
 
   // Helper function to check if task documents are approved and ready for forwarding
@@ -195,7 +255,6 @@ export default function DivisionManagerTaskDetail() {
     // 1. All documents are approved, OR
     // 2. User has approved (from approval history)
     const canForward = allDocumentsApproved || userHasApproved
-    
     return canForward
   }
 
@@ -214,126 +273,6 @@ export default function DivisionManagerTaskDetail() {
         return <span className="status-badge rejected">REJECTED</span>
       default:
         return <span className="status-badge draft">{status}</span>
-    }
-  }
-
-  // Division Manager review handlers
-  const handleApproveTask = async () => {
-    if (!task) return
-    try {
-      setProcessingReview(true)
-      const response = await apiService.approveTaskDocuments(task.TASK_ID, false, reviewRemarks)
-      if (!response.success) throw new Error(response.error || 'Failed to approve task')
-      
-      alert('Task documents approved successfully!')
-      setReviewRemarks('')
-      
-      // If there are no documents, mark as approved locally so Forward section can appear
-      if (taskDocuments.length === 0) {
-        setApprovedNoDocs(true)
-      }
-      
-      // Add a small delay to ensure backend has finished updating
-      setTimeout(async () => {
-        await loadTask()
-        await loadTaskDocuments()
-        await loadApprovalHistory()
-      }, 500)
-    } catch (error) {
-      alert((error as Error).message)
-    } finally {
-      setProcessingReview(false)
-    }
-  }
-
-  const handleForwardToRegional = async () => {
-    if (!task) return
-    try {
-      setProcessingReview(true)
-      const response = await apiService.forwardTaskToRegional(task.TASK_ID, forwardRemarks)
-      if (!response.success) throw new Error(response.error || 'Failed to forward task')
-      
-      alert('Task forwarded to Regional Director!')
-      setForwardRemarks('')
-      setShowForwardModal(false)
-      setForwardTarget(null)
-      await loadTask()
-      await loadTaskDocuments()
-      await loadApprovalHistory()
-    } catch (error) {
-      alert((error as Error).message)
-    } finally {
-      setProcessingReview(false)
-    }
-  }
-
-  const handleForwardToDivisionManager = async (targetDivisionManagerId: number) => {
-    if (!task) return
-    try {
-      setProcessingReview(true)
-      const response = await apiService.forwardTaskToDivisionManager(task.TASK_ID, forwardRemarks, targetDivisionManagerId)
-      if (!response.success) throw new Error(response.error || 'Failed to forward task')
-      
-      alert('Task forwarded to Division Manager!')
-      setForwardRemarks('')
-      setShowForwardModal(false)
-      setForwardTarget(null)
-      setSelectedDivisionManager(null)
-      await loadTask()
-      await loadTaskDocuments()
-      await loadApprovalHistory()
-    } catch (error) {
-      alert((error as Error).message)
-    } finally {
-      setProcessingReview(false)
-    }
-  }
-
-  const handleSendBackToSectionHead = async () => {
-    if (!task) return
-    if (!forwardRemarks.trim()) {
-      alert('Please provide remarks when sending back for revision')
-      return
-    }
-    try {
-      setProcessingReview(true)
-      const response = await apiService.sendBackToSectionHead(task.TASK_ID, forwardRemarks)
-      if (!response.success) throw new Error(response.error || 'Failed to send back to Section Head')
-      
-      alert('Task sent back to Section Unit Head for revision!')
-      setForwardRemarks('')
-      setShowForwardModal(false)
-      setForwardTarget(null)
-      await loadTask()
-      await loadTaskDocuments()
-      await loadApprovalHistory()
-    } catch (error) {
-      alert((error as Error).message)
-    } finally {
-      setProcessingReview(false)
-    }
-  }
-
-  const handleRejectTask = async () => {
-    if (!task) return
-    if (!reviewRemarks.trim()) {
-      alert('Please provide remarks for rejection')
-      return
-    }
-    try {
-      setProcessingReview(true)
-      const response = await apiService.rejectTaskDocuments(task.TASK_ID, reviewRemarks)
-      if (!response.success) throw new Error(response.error || 'Failed to reject task')
-      
-      alert('Task documents rejected')
-      setReviewRemarks('')
-      await loadTask()
-      await loadTaskDocuments()
-      await loadApprovalHistory()
-    } catch (error) {
-      alert((error as Error).message)
-    } finally {
-      setProcessingReview(false)
     }
   }
 
@@ -380,7 +319,7 @@ export default function DivisionManagerTaskDetail() {
 
       {/* Main Content */}
       <div className="task-detail-content">
-        {/* Left Column - Task Information (read-only) */}
+        {/* Left Column - Task Information */}
         <div className="task-info-section">
           <div className="task-info-card">
             <div className="task-header">
@@ -424,17 +363,17 @@ export default function DivisionManagerTaskDetail() {
               )}
             </div>
 
-            {/* Task Review Section (for Division Manager) */}
+            {/* View Submission Section (for Division Manager) */}
             {taskNeedsDivisionReview() && (
-              <div className="task-review-section">
-                <h3>Review Submission</h3>
-                <div className="review-info">
-                  <p>This task has been forwarded from Section Unit Head and requires your review. Please review the documents and take appropriate action.</p>
+              <div className="view-submission-section">
+                <h3>View Submission</h3>
+                <div className="submission-info">
+                  <p>This task has been submitted and requires your review. Please review the documents and take appropriate action.</p>
                 </div>
                 
-                <div className="review-form">
+                <div className="submission-form">
                   <div className="form-group">
-                    <label>Review Remarks</label>
+                    <label>Review Remarks (Optional)</label>
                     <textarea 
                       value={reviewRemarks}
                       onChange={(e) => setReviewRemarks(e.target.value)}
@@ -442,26 +381,26 @@ export default function DivisionManagerTaskDetail() {
                       placeholder="Add any remarks or feedback..."
                     />
                   </div>
+                </div>
+                
+                <div className="submission-actions">
+                  <button 
+                    type="button"
+                    onClick={handleApproveTask}
+                    disabled={processingReview}
+                    className="btn btn-success"
+                  >
+                    {processingReview ? 'Processing...' : 'Approve Document'}
+                  </button>
                   
-                  <div className="review-actions">
-                    <button 
-                      type="button"
-                      onClick={handleApproveTask}
-                      disabled={processingReview}
-                      className="btn btn-success"
-                    >
-                      {processingReview ? 'Processing...' : 'Approve'}
-                    </button>
-                    
-                    <button 
-                      type="button"
-                      onClick={handleRejectTask}
-                      disabled={processingReview}
-                      className="btn btn-danger"
-                    >
-                      {processingReview ? 'Processing...' : 'Request Revision'}
-                    </button>
-                  </div>
+                  <button 
+                    type="button"
+                    onClick={handleRejectTask}
+                    disabled={processingReview}
+                    className="btn btn-danger"
+                  >
+                    {processingReview ? 'Processing...' : 'Request Revision'}
+                  </button>
                 </div>
               </div>
             )}
@@ -502,6 +441,19 @@ export default function DivisionManagerTaskDetail() {
               </div>
             )}
 
+            {/* Already Actioned Section */}
+            {((task as any).ASSIGNED_BY === user?.USER_ID) && task.STATUS === 'completed' && !taskNeedsDivisionReview() && approvalHistory.length === 0 && (
+              <div className="already-actioned-section">
+                <h3>Task Status</h3>
+                <div className="actioned-info">
+                  <div className="actioned-icon">ℹ️</div>
+                  <div className="actioned-content">
+                    <p>This task is completed and ready for review, but you haven't taken any action yet.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Forward Documents Section (appears after approval) */}
             {taskDocumentsApproved() && (
               <div className="forward-documents-section">
@@ -513,12 +465,7 @@ export default function DivisionManagerTaskDetail() {
                 <div className="forward-actions">
                   <button 
                     type="button"
-                    onClick={() => {
-                      setShowForwardModal(true)
-                      if (divisionManagers.length === 0) {
-                        loadDivisionManagers()
-                      }
-                    }}
+                    onClick={() => setShowForwardModal(true)}
                     className="btn btn-primary"
                   >
                     Forward Documents
@@ -589,11 +536,7 @@ export default function DivisionManagerTaskDetail() {
               <h3>Forward Documents</h3>
               <button 
                 type="button"
-                onClick={() => {
-                  setShowForwardModal(false)
-                  setForwardTarget(null)
-                  setSelectedDivisionManager(null)
-                }}
+                onClick={() => setShowForwardModal(false)}
                 className="modal-close"
               >
                 ×
@@ -611,68 +554,8 @@ export default function DivisionManagerTaskDetail() {
                 />
               </div>
               
-              <div className="forward-options">
-                <h4>Forward to:</h4>
-                <div className="forward-option-list">
-                  <button 
-                    type="button"
-                    className={`forward-option-btn ${forwardTarget === 'regional' ? 'selected' : ''}`}
-                    onClick={() => setForwardTarget('regional')}
-                  >
-                    <div className="option-icon">🏢</div>
-                    <div className="option-content">
-                      <div className="option-title">Regional Director</div>
-                      <div className="option-description">Forward to Regional Director for final review</div>
-                    </div>
-                  </button>
-                  
-                  <button 
-                    type="button"
-                    className={`forward-option-btn ${forwardTarget === 'division' ? 'selected' : ''}`}
-                    onClick={() => {
-                      setForwardTarget('division')
-                      if (divisionManagers.length === 0) {
-                        loadDivisionManagers()
-                      }
-                    }}
-                  >
-                    <div className="option-icon">👔</div>
-                    <div className="option-content">
-                      <div className="option-title">Another Division Manager</div>
-                      <div className="option-description">Forward to another Division Manager</div>
-                    </div>
-                  </button>
-                  
-                  <button 
-                    type="button"
-                    className={`forward-option-btn ${forwardTarget === 'section' ? 'selected' : ''}`}
-                    onClick={() => setForwardTarget('section')}
-                  >
-                    <div className="option-icon">↩️</div>
-                    <div className="option-content">
-                      <div className="option-title">Send Back to Section Head</div>
-                      <div className="option-description">Return for revision with feedback</div>
-                    </div>
-                  </button>
-                </div>
-
-                {/* Division Manager Selection */}
-                {forwardTarget === 'division' && (
-                  <div className="form-group">
-                    <label>Select Division Manager</label>
-                    <select 
-                      value={selectedDivisionManager || ''}
-                      onChange={(e) => setSelectedDivisionManager(parseInt(e.target.value))}
-                    >
-                      <option value="">Choose a Division Manager...</option>
-                      {divisionManagers.map(manager => (
-                        <option key={manager.USER_ID} value={manager.USER_ID}>
-                          {manager.NAME} ({manager.SECTION_NAME})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+              <div className="forward-info">
+                <p>Documents will be forwarded to the Regional Director for final review.</p>
               </div>
             </div>
             
@@ -681,8 +564,7 @@ export default function DivisionManagerTaskDetail() {
                 type="button"
                 onClick={() => {
                   setShowForwardModal(false)
-                  setForwardTarget(null)
-                  setSelectedDivisionManager(null)
+                  setForwardRemarks('')
                 }}
                 className="btn btn-secondary"
               >
@@ -690,23 +572,11 @@ export default function DivisionManagerTaskDetail() {
               </button>
               <button 
                 type="button"
-                onClick={() => {
-                  if (forwardTarget === 'regional') {
-                    handleForwardToRegional()
-                  } else if (forwardTarget === 'division') {
-                    if (!selectedDivisionManager) {
-                      alert('Please select a Division Manager')
-                      return
-                    }
-                    handleForwardToDivisionManager(selectedDivisionManager)
-                  } else if (forwardTarget === 'section') {
-                    handleSendBackToSectionHead()
-                  }
-                }}
-                disabled={processingReview || !forwardTarget}
+                onClick={handleForwardToRegional}
+                disabled={processingReview}
                 className="btn btn-primary"
               >
-                {processingReview ? 'Forwarding...' : 'Forward Documents'}
+                {processingReview ? 'Forwarding...' : 'Forward to Regional Director'}
               </button>
             </div>
           </div>
@@ -715,5 +585,3 @@ export default function DivisionManagerTaskDetail() {
     </div>
   )
 }
-
-

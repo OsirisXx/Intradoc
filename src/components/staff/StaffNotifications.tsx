@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { apiService } from '../../services/api'
 import * as Types from '../../types'
 
 export function StaffNotifications() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [notifications, setNotifications] = useState<Types.TaskNotificationWithDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'unread'>('all')
@@ -133,6 +135,16 @@ export function StaffNotifications() {
     `
     document.body.appendChild(toast)
     setTimeout(() => document.body.removeChild(toast), 3000)
+  }
+
+  const getTaskNavigationUrl = (notification: Types.TaskNotificationWithDetails): string => {
+    // If notification has RELATED_TASK_ID, construct the work page URL
+    if (notification.RELATED_TASK_ID) {
+      return `/staff/work/${notification.RELATED_TASK_ID}`
+    }
+
+    // If no RELATED_TASK_ID, go to general work page
+    return '/staff/work'
   }
 
   return (
@@ -346,15 +358,16 @@ export function StaffNotifications() {
                         className="action-btn primary"
                         onClick={(e) => {
                           e.stopPropagation()
-                          window.location.href = '/staff/tasks'
+                          const taskUrl = getTaskNavigationUrl(notification)
+                          navigate(taskUrl)
                         }}
-                        title="View tasks"
+                        title="View task"
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4"/>
                           <path d="M13 7H7l4-4 4 4z"/>
                         </svg>
-                        <span className="button-text">View Tasks</span>
+                        <span className="button-text">View Task</span>
                       </button>
                     )}
                     
@@ -363,7 +376,8 @@ export function StaffNotifications() {
                         className="action-btn primary"
                         onClick={(e) => {
                           e.stopPropagation()
-                          window.location.href = '/staff/work'
+                          const taskUrl = getTaskNavigationUrl(notification)
+                          navigate(taskUrl)
                         }}
                         title="View documents"
                       >
@@ -380,7 +394,7 @@ export function StaffNotifications() {
                         className="action-btn primary"
                         onClick={(e) => {
                           e.stopPropagation()
-                          window.location.href = '/staff/feedback'
+                          navigate('/staff/feedback')
                         }}
                         title="View feedback"
                       >

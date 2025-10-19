@@ -389,6 +389,7 @@ class ApiService {
     }
   }
 
+
   async forwardTaskToRegional(taskId: number, remarks?: string): Promise<ApiResponse<void>> {
     try {
       const response = await apiClient.post(`/tasks/${taskId}/forward-regional`, {
@@ -509,6 +510,16 @@ class ApiService {
     } catch (error) {
       console.error('Error fetching division manager tasks:', error);
       return { success: false, error: 'Failed to fetch division manager tasks' };
+    }
+  }
+
+  async getDocumentProgress(userId: number): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await apiClient.get(`/documents/progress/${userId}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching document progress:', error);
+      return { success: false, error: 'Failed to fetch document progress' };
     }
   }
 
@@ -773,18 +784,13 @@ class ApiService {
 
   // Send to Regional Director methods
   async forwardToRegionalDirector(documentId: number, remarks: string): Promise<ApiResponse<void>> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const document = this.documents.find(d => d.DOCUMENT_ID === documentId);
-        if (document) {
-          // Update document with forwarding info
-          (document as any).FORWARDED_TO_REGIONAL = true;
-          (document as any).FORWARDED_BY = 1; // Current user
-          (document as any).FORWARDED_AT = new Date().toISOString();
-        }
-        resolve({ success: true });
-      }, 300);
-    });
+    try {
+      const response = await apiClient.post(`/documents/${documentId}/forward-regional`, { remarks });
+      return response;
+    } catch (error) {
+      console.error('Error forwarding to regional director:', error);
+      return { success: false, error: 'Failed to forward document to regional director' };
+    }
   }
 
   async getForwardedDocuments(): Promise<ApiResponse<DocumentWithDetails[]>> {
@@ -936,7 +942,7 @@ class ApiService {
       case 'division_manager':
         return '/division-manager/review';
       case 'regional_director':
-        return '/regional-director/review';
+        return '/regional-director';
       default:
         return '/';
     }

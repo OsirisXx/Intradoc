@@ -11,6 +11,7 @@ export function DivisionManagerDashboard() {
   const [notifications, setNotifications] = useState<Types.TaskNotificationWithDetails[]>([])
   const [tasks, setTasks] = useState<any[]>([])
   const [streamPosts, setStreamPosts] = useState<Types.StreamPost[]>([])
+  const [documentProgress, setDocumentProgress] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedPost, setSelectedPost] = useState<Types.StreamPost | null>(null)
   
@@ -32,11 +33,12 @@ export function DivisionManagerDashboard() {
   const loadDashboardData = async () => {
     try {
       setLoading(true)
-      const [documentsRes, notificationsRes, tasksRes, postsRes] = await Promise.all([
+      const [documentsRes, notificationsRes, tasksRes, postsRes, progressRes] = await Promise.all([
         apiService.getDocumentsBySection(user?.SECTION_ID || 0),
         apiService.getNotifications(user?.USER_ID || 0),
         apiService.getTasksAssignedTo(user?.USER_ID || 0),
-        apiService.getAllPosts()
+        apiService.getAllPosts(),
+        apiService.getDocumentProgress(user?.USER_ID || 0)
       ])
 
       if (documentsRes.success) {
@@ -57,6 +59,10 @@ export function DivisionManagerDashboard() {
 
       if (postsRes.success) {
         setStreamPosts(postsRes.data?.slice(0, 5) || [])
+      }
+
+      if (progressRes.success) {
+        setDocumentProgress(progressRes.data || [])
       }
       calculateStats(documentsRes.data || [], tasksRes.data || [])
     } catch (error) {
@@ -119,6 +125,27 @@ export function DivisionManagerDashboard() {
         return <span className="status-badge draft">PENDING</span>
       default:
         return <span className="status-badge draft">{status.toUpperCase()}</span>
+    }
+  }
+
+  const getNextStepRole = (status: string) => {
+    switch (status) {
+      case 'Submitted':
+      case 'Under_Section_Review':
+        return 'Section Unit Head'
+      case 'Under_Division_Review':
+        return 'Division Manager'
+      case 'Under_Regional_Review':
+        return 'Regional Director'
+      case 'Approved':
+      case 'Archived':
+        return 'Completed'
+      case 'Rejected':
+        return 'None'
+      case 'Revision_Required':
+        return 'Resubmit Required'
+      default:
+        return 'Unknown'
     }
   }
 
@@ -383,56 +410,64 @@ export function DivisionManagerDashboard() {
           </div>
       </div>
       </div>
-      <div className="dashboard-grid-modern">
-        {!isRegionalDirector && (
-        <div className="dashboard-card-modern">
-          <div className="card-header">
-            <div className="card-title">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14,2 14,8 20,8"/>
-              </svg>
-              Recent uploaded documents
-            </div>
-            <button 
-              className="btn btn-outline btn-sm"
-              onClick={() => window.location.href = '/division-manager/reports'}
-            >
-              View All
-            </button>
-          </div>
-          <div className="card-content">
-            {documents.length === 0 ? (
-              <div className="empty-state">
-                <p>No documents submitted by staff yet</p>
-              </div>
-            ) : (
-              <div className="documents-list">
-                {documents.map(doc => (
-                  <div key={doc.DOCUMENT_ID} className="document-item">
-                    <div className="document-info">
-                      <div className="document-title">{doc.TITLE}</div>
-                      <div className="document-meta">
-                        <span>By {doc.createdByUser?.NAME || 'Unknown'}</span>
-                        <span>•</span>
-                        <span>{formatDate(doc.CREATED_AT)}</span>
-                      </div>
-                    </div>
-                    <div className="document-status">
-                      {getStatusBadge(doc.STATUS)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-        )}
 
-        
+      {/* Document Progress Section - Full Width */}
+      <div className="document-status-section" style={{ gridColumn: '1 / -1', width: '100%', marginTop: '24px' }}>
+        <div className="section-title-bar">
+          <h2>DOCUMENT PROGRESS</h2>
+        </div>
+        <div className="document-status-content">
+          {loading ? (
+            <div className="empty-state">Loading...</div>
+          ) : documentProgress.length === 0 ? (
+            <div className="empty-state">No documents uploaded yet</div>
+          ) : (
+            <table className="document-status-table" style={{ width: '100%', tableLayout: 'fixed' }}>
+              <thead>
+                <tr>
+                  <th style={{ width: '30%', textAlign: 'left' }}>DOCUMENT</th>
+                  <th style={{ width: '20%', textAlign: 'center' }}>CURRENT STATUS</th>
+                  <th style={{ width: '20%', textAlign: 'center' }}>NEXT STEP</th>
+                  <th style={{ width: '15%', textAlign: 'center' }}>DEPARTMENT</th>
+                  <th style={{ width: '15%', textAlign: 'center' }}>LAST UPDATED</th>
+                </tr>
+              </thead>
+              <tbody>
+                {documentProgress.map(doc => (
+                  <tr key={doc.DOCUMENT_ID}>
+                    <td style={{ textAlign: 'left', padding: '12px 8px' }}>
+                      <div className="document-title" style={{ fontWeight: '500', marginBottom: '4px' }}>{doc.TITLE}</div>
+                    </td>
+                    <td style={{ textAlign: 'center', padding: '12px 8px' }}>
+                      {getStatusBadge(doc.CURRENT_STATUS || 'Submitted')}
+                    </td>
+                    <td style={{ textAlign: 'center', padding: '12px 8px' }}>
+                      <span className="next-step" style={{ 
+                        fontSize: '0.875rem', 
+                        fontWeight: '500',
+                        color: '#374151'
+                      }}>{getNextStepRole(doc.CURRENT_STATUS)}</span>
+                    </td>
+                    <td style={{ textAlign: 'center', padding: '12px 8px' }}>
+                      <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                        {doc.SECTION_NAME || 'Unknown'}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'center', padding: '12px 8px' }}>
+                      <div className="document-date" style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                        {doc.LAST_UPDATED ? formatDate(doc.LAST_UPDATED) : 'N/A'}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
-      <div className="quick-actions-modern">
+
+      <div className="quick-actions-modern" style={{ marginTop: '32px' }}>
         <div className="actions-grid-modern">
           <button 
             className="action-card-modern"

@@ -312,12 +312,27 @@ exports.updateTaskStatus = async (req, res) => {
     // Create notification for task creator if completed
     if (status === 'completed') {
       const task = tasks[0];
+      
+      // Get the role of the user who assigned the task to determine correct URL
+      const [assignedByUser] = await pool.query('SELECT FUNCTIONAL_ROLE FROM user WHERE USER_ID = ?', [task.ASSIGNED_BY]);
+      const userRole = assignedByUser.length > 0 ? assignedByUser[0].FUNCTIONAL_ROLE : 'section_unit_head';
+      
+      // Determine the correct action URL based on user role
+      let actionUrl;
+      if (userRole === 'division_manager') {
+        actionUrl = `/division-manager/task-assignment/${task.TASK_ID}`;
+      } else if (userRole === 'regional_director') {
+        actionUrl = `/regional-director/task-assignment/${task.TASK_ID}`;
+      } else {
+        actionUrl = `/section-unit-head/work/${task.TASK_ID}`;
+      }
+      
       await createNotification({
         userId: task.ASSIGNED_BY,
         type: 'task_completed',
         title: 'Task Completed',
         message: `Task "${task.TITLE}" has been completed`,
-        actionUrl: '/section-unit-head/tasks'
+        actionUrl: actionUrl
       });
     }
 
@@ -396,13 +411,27 @@ exports.submitTask = async (req, res) => {
       );
     }
 
-    // Notify Section Unit Head that task is ready for review
+    // Get the role of the user who assigned the task to determine correct URL
+    const [assignedByUser] = await pool.query('SELECT FUNCTIONAL_ROLE FROM user WHERE USER_ID = ?', [task.ASSIGNED_BY]);
+    const assignedByRole = assignedByUser.length > 0 ? assignedByUser[0].FUNCTIONAL_ROLE : 'section_unit_head';
+    
+    // Determine the correct action URL based on user role
+    let actionUrl;
+    if (assignedByRole === 'division_manager') {
+      actionUrl = `/division-manager/task-assignment/${task.TASK_ID}`;
+    } else if (assignedByRole === 'regional_director') {
+      actionUrl = `/regional-director/task-assignment/${task.TASK_ID}`;
+    } else {
+      actionUrl = `/section-unit-head/work/${task.TASK_ID}`;
+    }
+
+    // Notify the user who assigned the task that it's ready for review
     await createNotification({
       userId: task.ASSIGNED_BY,
       type: 'task_submitted',
       title: 'Task Submitted for Review',
       message: `Task "${task.TITLE}" has been submitted and is ready for review`,
-      actionUrl: `/section-unit-head/work/${task.TASK_ID}`
+      actionUrl: actionUrl
     });
 
     res.json({ success: true, message: 'Task submitted' });
@@ -425,6 +454,18 @@ exports.unsubmitTask = async (req, res) => {
     }
 
     await pool.query('UPDATE TASK SET STATUS = "in_progress", UPDATED_AT = NOW() WHERE TASK_ID = ? AND ASSIGNED_TO = ?', [taskId, userId]);
+
+    // Also revert document statuses so attachments are no longer shown as Submitted
+    const [documents] = await pool.query(
+      'SELECT DOCUMENT_ID FROM document WHERE ASSIGNED_TO = ?',
+      [taskId]
+    );
+    for (const doc of documents) {
+      await pool.query(
+        'INSERT INTO document_status (DOCUMENT_ID, STATUS, REMARKS, CREATED_AT) VALUES (?, ?, ?, NOW())',
+        [doc.DOCUMENT_ID, 'Draft', 'Unsubmitted by assignee']
+      );
+    }
 
     res.json({ success: true, message: 'Task unsubmitted' });
   } catch (error) {
@@ -537,6 +578,7 @@ exports.getTaskApprovalHistory = async (req, res) => {
 
     // Get approval history for documents in this task by the specified user
     // Only show approvals for documents currently assigned to this specific task
+    // Deduplicate by FINGERPRINT_HASH to show only one approval per unique document
     const [approvals] = await pool.query(
       `SELECT 
         da.APPROVAL_ID,
@@ -547,6 +589,7 @@ exports.getTaskApprovalHistory = async (req, res) => {
         da.REMARKS,
         da.DATE_APPROVED,
         d.TITLE as DOCUMENT_TITLE,
+        d.FINGERPRINT_HASH,
         u.NAME as APPROVER_NAME,
         CASE 
           WHEN da.DOCUMENT_ID < 0 THEN 'Task Approval'
@@ -570,11 +613,45 @@ exports.getTaskApprovalHistory = async (req, res) => {
       [userId, taskId, taskId, taskId]
     );
 
+    // Deduplicate approval history by FINGERPRINT_HASH
+    // Keep only the most recent approval for each unique document (by fingerprint hash)
+    const deduplicatedApprovals = [];
+    const fingerprintMap = new Map();
+    
+    approvals.forEach(approval => {
+      const fingerprintHash = approval.FINGERPRINT_HASH;
+      
+      // For virtual task approvals (DOCUMENT_ID < 0), don't deduplicate
+      if (approval.DOCUMENT_ID < 0) {
+        deduplicatedApprovals.push(approval);
+        return;
+      }
+      
+      // For regular documents, deduplicate by fingerprint hash
+      if (!fingerprintHash) {
+        // If no fingerprint hash, include it (shouldn't happen but safety check)
+        deduplicatedApprovals.push(approval);
+        return;
+      }
+      
+      const existing = fingerprintMap.get(fingerprintHash);
+      if (!existing) {
+        fingerprintMap.set(fingerprintHash, approval);
+        deduplicatedApprovals.push(approval);
+      } else {
+        // Keep the most recent approval (already sorted by DATE_APPROVED DESC)
+        // So the first occurrence is the most recent
+        // No need to replace, just skip
+      }
+    });
+
     console.log('Approval history query result for task', taskId, 'user', userId, ':', approvals);
+    console.log('Deduplicated approval history:', deduplicatedApprovals);
+    console.log('Query parameters:', { userId, taskId });
 
     res.json({
       success: true,
-      data: approvals
+      data: deduplicatedApprovals
     });
   } catch (error) {
     console.error('Get task approval history error:', error);
@@ -620,6 +697,7 @@ exports.getDocumentsForTask = async (req, res) => {
         d.FINGERPRINT_HASH,
         d.CREATED_AT,
         d.TAGS,
+        d.CREATED_BY,
         creator.NAME as CREATED_BY_NAME,
         ds.STATUS_ID,
         ds.STATUS as CURRENT_STATUS,
@@ -649,6 +727,7 @@ exports.getDocumentsForTask = async (req, res) => {
     // Transform documents to match DocumentWithDetails structure
     const transformedDocuments = documents.map(doc => ({
       ...doc,
+      CREATED_BY: doc.CREATED_BY,
       CREATED_BY_NAME: doc.CREATED_BY_NAME,
       currentStatus: doc.CURRENT_STATUS ? {
         STATUS_ID: doc.STATUS_ID,
@@ -693,8 +772,8 @@ exports.approveTaskDocuments = async (req, res) => {
     if (userRole === 'section_unit_head' && task.ASSIGNED_BY !== userId) {
       return res.status(403).json({ success: false, error: 'You can only approve tasks assigned by you' });
     }
-    if (userRole === 'division_manager' && task.ASSIGNED_TO !== userId) {
-      return res.status(403).json({ success: false, error: 'You can only approve tasks assigned to you' });
+    if (userRole === 'division_manager' && task.ASSIGNED_BY !== userId) {
+      return res.status(403).json({ success: false, error: 'You can only approve tasks assigned by you' });
     }
 
     // Check if user has already approved/rejected this task
@@ -820,6 +899,9 @@ exports.rejectTaskDocuments = async (req, res) => {
 
     // Check permissions based on role
     if (userRole === 'section_unit_head' && task.ASSIGNED_BY !== userId) {
+      return res.status(403).json({ success: false, error: 'You can only reject tasks assigned by you' });
+    }
+    if (userRole === 'division_manager' && task.ASSIGNED_BY !== userId) {
       return res.status(403).json({ success: false, error: 'You can only reject tasks assigned by you' });
     }
 
@@ -981,13 +1063,49 @@ exports.forwardTaskToDivisionManager = async (req, res) => {
 
     // Handle notifications based on targeting
     if (targetDivisionManagerId) {
+      // Copy documents to the Division Manager for review in reports
+      for (const doc of documents) {
+        // Create a copy of the document for Division Manager review
+        const [newDocResult] = await pool.query(
+          `INSERT INTO document (
+            TITLE, DESCRIPTION, FILE_LINK, FINGERPRINT_HASH, 
+            CATEGORY_ID, SECTION_ID, CREATED_BY, ASSIGNED_TO,
+            TAGS, FREQUENCY
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            doc.TITLE + ' (Forwarded)',
+            doc.DESCRIPTION + (remarks ? `\n\nForwarded with remarks: ${remarks}` : ''),
+            doc.FILE_LINK,
+            doc.FINGERPRINT_HASH,
+            doc.CATEGORY_ID,
+            doc.SECTION_ID,
+            doc.CREATED_BY,
+            -targetDivisionManagerId, // Use negative ID to indicate forwarded to division manager
+            doc.TAGS,
+            doc.FREQUENCY
+          ]
+        );
+
+        // Create initial status for the copied document
+        await pool.query(
+          'INSERT INTO document_status (DOCUMENT_ID, STATUS, REMARKS, CREATED_AT) VALUES (?, ?, ?, NOW())',
+          [newDocResult.insertId, 'Under_Division_Review', 'Forwarded from Section Unit Head']
+        );
+
+        // Create approval record for the copied document with forwarded by information
+        await pool.query(
+          'INSERT INTO document_approval (DOCUMENT_ID, USER_ID, ROLE, STATUS, REMARKS, DATE_APPROVED) VALUES (?, ?, ?, 1, ?, NOW())',
+          [newDocResult.insertId, userId, userRole, `Forwarded by Section Unit Head to Division Manager${remarks ? ` - ${remarks}` : ''}`]
+        );
+      }
+
       // Notify specific Division Manager
       await createNotification({
         userId: targetDivisionManagerId,
         type: 'task_forwarded',
         title: 'Task Documents Forwarded',
-        message: `Task "${task.TITLE}" documents have been forwarded to you for review. ${remarks ? `Remarks: ${remarks}` : ''}`,
-        actionUrl: `/division-manager/task-assignment/${task.TASK_ID}`
+        message: `Task "${task.TITLE}" documents have been copied and forwarded to you for review. ${remarks ? `Remarks: ${remarks}` : ''}`,
+        actionUrl: `/division-manager/reports`
       });
     } else if (targetTaskId) {
       // Verify target task exists and get its details
@@ -1198,13 +1316,27 @@ exports.sendBackToSectionHead = async (req, res) => {
       );
     }
 
-    // Send notification to Section Unit Head
+    // Get the role of the user who assigned the task to determine correct URL
+    const [assignedByUser] = await pool.query('SELECT FUNCTIONAL_ROLE FROM user WHERE USER_ID = ?', [task.ASSIGNED_BY]);
+    const assignedByRole = assignedByUser.length > 0 ? assignedByUser[0].FUNCTIONAL_ROLE : 'section_unit_head';
+    
+    // Determine the correct action URL based on user role
+    let actionUrl;
+    if (assignedByRole === 'division_manager') {
+      actionUrl = `/division-manager/task-assignment/${task.TASK_ID}`;
+    } else if (assignedByRole === 'regional_director') {
+      actionUrl = `/regional-director/task-assignment/${task.TASK_ID}`;
+    } else {
+      actionUrl = `/section-unit-head/work/${task.TASK_ID}`;
+    }
+
+    // Send notification to the user who assigned the task
     await createNotification({
       userId: task.ASSIGNED_BY,
       type: 'task_revision_required',
       title: 'Task Requires Revision',
       message: `Your task "${task.TITLE}" has been sent back for revision. Reason: ${remarks}`,
-      actionUrl: `/section-unit-head/work/${task.TASK_ID}`
+      actionUrl: actionUrl
     });
 
     // Update message based on whether documents exist
@@ -1311,13 +1443,16 @@ async function notifyRegionalDirectorsForReview(task, documents, remarks) {
       'SELECT USER_ID FROM user WHERE FUNCTIONAL_ROLE = "regional_director"'
     );
 
+    // Use the first document ID for the notification URL since tasks can have multiple documents
+    const firstDocumentId = documents.length > 0 ? documents[0].DOCUMENT_ID : null;
+
     for (const director of regionalDirectors) {
       await createNotification({
         userId: director.USER_ID,
         type: 'task_requires_review',
         title: 'Task Documents Require Review',
         message: `Task "${task.TITLE}" documents require your review`,
-        actionUrl: `/regional-director/review/${task.TASK_ID}`
+        actionUrl: firstDocumentId ? `/regional-director/reports?documentId=${firstDocumentId}` : '/regional-director/reports'
       });
     }
   } catch (error) {

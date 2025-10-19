@@ -20,6 +20,7 @@ router.post('/:documentId/reject', documentsController.rejectDocument);
 router.post('/:documentId/request-revision', documentsController.requestRevision);
 router.post('/:documentId/forward-regional', documentsController.forwardToRegional);
 router.get('/:documentId/approval-history', documentsController.getApprovalHistory);
+router.get('/progress/:userId', documentsController.getDocumentProgress);
 
 // Document download
 router.get('/download/:documentId', documentsController.downloadDocument);
