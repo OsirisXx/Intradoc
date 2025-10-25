@@ -61,13 +61,19 @@ async function startServer() {
   // Detect available port
   const PORT = await detect(DEFAULT_PORT);
   
-  if (PORT !== DEFAULT_PORT) {
-    console.log(`⚠️  Port ${DEFAULT_PORT} is in use, using port ${PORT} instead`);
+  // Ensure both are numbers for comparison
+  const portNum = Number(PORT);
+  const defaultPortNum = Number(DEFAULT_PORT);
+  
+  if (portNum !== defaultPortNum) {
+    console.log(`⚠️  Port ${defaultPortNum} is in use, using port ${portNum} instead`);
+  } else {
+    console.log(`✅ Using port ${portNum}`);
   }
   
   // Write the actual port to .env.local for frontend
   const envPath = path.join(__dirname, '../../.env.local');
-  const envContent = `VITE_API_URL=http://localhost:${PORT}/api\n`;
+  const envContent = `VITE_API_URL=http://localhost:${portNum}/api\n`;
   
   try {
     await fs.writeFile(envPath, envContent);
@@ -76,9 +82,9 @@ async function startServer() {
     console.warn(`⚠️  Could not write .env.local file: ${error.message}`);
   }
   
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log(`📚 API Documentation: http://localhost:${PORT}/api/health`);
+  app.listen(portNum, () => {
+    console.log(`🚀 Server running on http://localhost:${portNum}`);
+    console.log(`📚 API Documentation: http://localhost:${portNum}/api/health`);
   });
 }
 

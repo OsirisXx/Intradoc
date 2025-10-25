@@ -22,6 +22,10 @@ router.post('/:documentId/forward-regional', documentsController.forwardToRegion
 router.get('/:documentId/approval-history', documentsController.getApprovalHistory);
 router.get('/progress/:userId', documentsController.getDocumentProgress);
 
+// Forwarded documents for Regional Directors
+router.get('/forwarded', documentsController.getForwardedDocuments);
+router.post('/:documentId/approve-forwarded', documentsController.approveForwardedDocument);
+
 // Document download
 router.get('/download/:documentId', documentsController.downloadDocument);
 

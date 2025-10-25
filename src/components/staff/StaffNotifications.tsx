@@ -19,6 +19,16 @@ export function StaffNotifications() {
     }
   }, [user])
 
+  // Auto-mark all notifications as read when user visits the page
+  useEffect(() => {
+    if (user && notifications.length > 0) {
+      const hasUnreadNotifications = notifications.some(n => !n.IS_READ)
+      if (hasUnreadNotifications) {
+        autoMarkAllAsRead()
+      }
+    }
+  }, [user, notifications])
+
   const loadNotifications = async () => {
     if (!user) return
     
@@ -63,6 +73,23 @@ export function StaffNotifications() {
       )
     } catch (error) {
       console.error('Error marking all notifications as read:', error)
+    }
+  }
+
+  const autoMarkAllAsRead = async () => {
+    try {
+      if (!user) return
+      
+      // Use the backend bulk endpoint for better performance
+      const response = await apiService.markAllNotificationsAsRead(user.USER_ID)
+      if (response.success) {
+        // Update local state to reflect all notifications as read
+        setNotifications(prev => 
+          prev.map(notif => ({ ...notif, IS_READ: true }))
+        )
+      }
+    } catch (error) {
+      console.error('Error auto-marking all notifications as read:', error)
     }
   }
 

@@ -37,7 +37,7 @@ type SystemHealth = Types.SystemHealth;
 
 // Mock data - In a real application, these would be API calls
 class ApiService {
-  private baseUrl = 'http://localhost:3002/api'; // Adjust based on your backend
+  private baseUrl = 'http://localhost:3001/api'; // Adjust based on your backend
 
   // Real API calls using apiClient
   async getUsers(): Promise<ApiResponse<User[]>> {
@@ -315,6 +315,16 @@ class ApiService {
     } catch (error) {
       console.error('Error fetching assigned tasks:', error);
       return { success: false, error: 'Failed to fetch tasks' };
+    }
+  }
+
+  async getAllTasksForOversight(): Promise<ApiResponse<TaskWithDetails[]>> {
+    try {
+      const response = await apiClient.get('/tasks/all-tasks');
+      return response;
+    } catch (error) {
+      console.error('Error fetching all tasks for oversight:', error);
+      return { success: false, error: 'Failed to fetch all tasks' };
     }
   }
 
@@ -609,16 +619,13 @@ class ApiService {
   }
 
   async markAllNotificationsAsRead(userId: number): Promise<ApiResponse<void>> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        this.notifications.forEach(notification => {
-          if (notification.USER_ID === userId) {
-            notification.READ = true;
-          }
-        });
-        resolve({ success: true });
-      }, 300);
-    });
+    try {
+      const response = await apiClient.put(`/notifications/mark-all-read/${userId}`);
+      return response;
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+      return { success: false, error: 'Failed to mark all notifications as read' };
+    }
   }
 
   async createNotification(notificationData: NotificationForm): Promise<ApiResponse<TaskNotification>> {
@@ -794,12 +801,23 @@ class ApiService {
   }
 
   async getForwardedDocuments(): Promise<ApiResponse<DocumentWithDetails[]>> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const forwardedDocs = this.documents.filter(d => (d as any).FORWARDED_TO_REGIONAL);
-        resolve({ success: true, data: forwardedDocs });
-      }, 300);
-    });
+    try {
+      const response = await apiClient.get('/documents/forwarded');
+      return response;
+    } catch (error) {
+      console.error('Error fetching forwarded documents:', error);
+      return { success: false, error: 'Failed to fetch forwarded documents' };
+    }
+  }
+
+  async approveForwardedDocument(documentId: number, remarks?: string): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.post(`/documents/${documentId}/approve-forwarded`, { remarks });
+      return response;
+    } catch (error) {
+      console.error('Error approving forwarded document:', error);
+      return { success: false, error: 'Failed to approve forwarded document' };
+    }
   }
 
   // Helper methods

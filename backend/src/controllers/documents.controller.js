@@ -737,6 +737,145 @@ async function createNotification({ userId, type, title, message, actionUrl }) {
   }
 }
 
+// Approve forwarded document (Regional Director only)
+exports.approveForwardedDocument = async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const { remarks } = req.body;
+    const userId = req.user.userId;
+    const userRole = req.user.role;
+
+    if (userRole !== 'regional_director') {
+      return res.status(403).json({ success: false, error: 'Only Regional Directors can approve forwarded documents' });
+    }
+
+    // Get document details and verify it's forwarded
+    const [documents] = await pool.query('SELECT * FROM document WHERE DOCUMENT_ID = ? AND FORWARDED_TO_REGIONAL = 1', [documentId]);
+    if (documents.length === 0) {
+      return res.status(404).json({ success: false, error: 'Forwarded document not found' });
+    }
+
+    const document = documents[0];
+
+    // Check if already approved
+    const [existingApproval] = await pool.query(
+      'SELECT * FROM document_approval WHERE DOCUMENT_ID = ? AND ROLE = "regional_director" AND STATUS = 1',
+      [documentId]
+    );
+
+    if (existingApproval.length > 0) {
+      return res.status(400).json({ success: false, error: 'Document has already been approved' });
+    }
+
+    // Update document status to Approved_Forwarded
+    await pool.query(
+      'INSERT INTO document_status (DOCUMENT_ID, STATUS, REMARKS, CREATED_AT) VALUES (?, "Approved_Forwarded", ?, NOW())',
+      [documentId, remarks || 'Approved by Regional Director']
+    );
+
+    // Create approval record
+    await pool.query(
+      'INSERT INTO document_approval (DOCUMENT_ID, USER_ID, ROLE, STATUS, REMARKS, DATE_APPROVED) VALUES (?, ?, "regional_director", 1, ?, NOW())',
+      [documentId, userId, remarks || 'Approved by Regional Director']
+    );
+
+    // Archive the document
+    await pool.query(
+      'INSERT INTO archive (DOCUMENT_ID, ARCHIVED_BY, DATE_ARCHIVED) VALUES (?, ?, NOW())',
+      [documentId, userId]
+    );
+
+    // Send notifications
+    await createNotification({
+      userId: document.CREATED_BY,
+      type: 'document_approved_forwarded',
+      title: 'Forwarded Document Approved',
+      message: `Your forwarded document "${document.TITLE}" has been approved by the Regional Director`,
+      actionUrl: '/staff/work'
+    });
+
+    // Notify the forwarder (Division Manager)
+    if (document.FORWARDED_BY) {
+      await createNotification({
+        userId: document.FORWARDED_BY,
+        type: 'forwarded_document_approved',
+        title: 'Forwarded Document Approved',
+        message: `The document "${document.TITLE}" you forwarded has been approved by the Regional Director`,
+        actionUrl: '/division-manager/reports'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Forwarded document approved and archived successfully'
+    });
+  } catch (error) {
+    console.error('Approve forwarded document error:', error);
+    res.status(500).json({ success: false, error: 'Failed to approve forwarded document' });
+  }
+};
+
+// Get forwarded documents for Regional Directors
+exports.getForwardedDocuments = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const userRole = req.user.role;
+
+    if (userRole !== 'regional_director') {
+      return res.status(403).json({ success: false, error: 'Only Regional Directors can access forwarded documents' });
+    }
+
+    const [forwardedDocuments] = await pool.query(`
+      SELECT d.*, 
+             dc.NAME as CATEGORY_NAME,
+             s.NAME as SECTION_NAME,
+             creator.NAME as CREATED_BY_NAME,
+             creator.FUNCTIONAL_ROLE as CREATED_BY_ROLE,
+             forwarder.NAME as FORWARDED_BY_NAME,
+             forwarder.FUNCTIONAL_ROLE as FORWARDED_BY_ROLE,
+             ds.STATUS as CURRENT_STATUS,
+             ds.REMARKS as CURRENT_REMARKS,
+             ds.CREATED_AT as STATUS_DATE,
+             d.FORWARDED_AT,
+             d.FORWARDED_BY,
+             approval.DATE_APPROVED as APPROVAL_DATE,
+             approval.REMARKS as APPROVAL_REMARKS
+      FROM document d
+      LEFT JOIN document_category dc ON d.CATEGORY_ID = dc.CATEGORY_ID
+      LEFT JOIN section s ON d.SECTION_ID = s.SECTION_ID
+      LEFT JOIN user creator ON d.CREATED_BY = creator.USER_ID
+      LEFT JOIN user forwarder ON d.FORWARDED_BY = forwarder.USER_ID
+      LEFT JOIN (
+        SELECT DOCUMENT_ID, STATUS, REMARKS, CREATED_AT
+        FROM document_status 
+        WHERE STATUS_ID IN (
+          SELECT MAX(STATUS_ID) 
+          FROM document_status 
+          GROUP BY DOCUMENT_ID
+        )
+      ) ds ON d.DOCUMENT_ID = ds.DOCUMENT_ID
+      LEFT JOIN (
+        SELECT DOCUMENT_ID, DATE_APPROVED, REMARKS
+        FROM document_approval 
+        WHERE STATUS = 1 AND ROLE = 'regional_director'
+        AND DOCUMENT_ID IN (
+          SELECT DOCUMENT_ID FROM document WHERE FORWARDED_TO_REGIONAL = 1
+        )
+      ) approval ON d.DOCUMENT_ID = approval.DOCUMENT_ID
+      WHERE d.FORWARDED_TO_REGIONAL = 1
+      ORDER BY d.FORWARDED_AT DESC
+    `);
+
+    res.json({
+      success: true,
+      data: forwardedDocuments
+    });
+  } catch (error) {
+    console.error('Get forwarded documents error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch forwarded documents' });
+  }
+};
+
 // Get documents by section (including forwarded documents for Division Managers)
 exports.getDocumentsBySection = async (req, res) => {
   try {

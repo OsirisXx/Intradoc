@@ -67,7 +67,7 @@ export function SectionUnitHeadSidebar() {
             <path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4"/>
             <path d="M13 7H7l4-4 4 4z"/>
           </svg>
-          Tasks
+          Task Assignment
         </NavLink>
         
         <NavLink to="/section-unit-head/notifications" className="nav-link">

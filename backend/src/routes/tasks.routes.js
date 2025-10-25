@@ -19,6 +19,7 @@ router.delete('/:taskId', tasksController.deleteTask);
 
 // Special queries
 router.get('/overdue/:userId', tasksController.getOverdueTasks);
+router.get('/all-tasks', tasksController.getAllTasksForOversight);
 
 // Document linking
 router.post('/:taskId/link-document', tasksController.linkDocumentToTask);

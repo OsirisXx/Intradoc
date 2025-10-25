@@ -10,6 +10,7 @@ export function DivisionManagerDashboard() {
   const [documents, setDocuments] = useState<any[]>([])
   const [notifications, setNotifications] = useState<Types.TaskNotificationWithDetails[]>([])
   const [tasks, setTasks] = useState<any[]>([])
+  const [allOrgTasks, setAllOrgTasks] = useState<any[]>([])
   const [streamPosts, setStreamPosts] = useState<Types.StreamPost[]>([])
   const [documentProgress, setDocumentProgress] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -33,10 +34,16 @@ export function DivisionManagerDashboard() {
   const loadDashboardData = async () => {
     try {
       setLoading(true)
+      
+      // If Regional Director, fetch all tasks for oversight
+      const tasksToFetch = isRegionalDirector 
+        ? apiService.getAllTasksForOversight()
+        : apiService.getTasksAssignedTo(user?.USER_ID || 0)
+      
       const [documentsRes, notificationsRes, tasksRes, postsRes, progressRes] = await Promise.all([
         apiService.getDocumentsBySection(user?.SECTION_ID || 0),
         apiService.getNotifications(user?.USER_ID || 0),
-        apiService.getTasksAssignedTo(user?.USER_ID || 0),
+        tasksToFetch,
         apiService.getAllPosts(),
         apiService.getDocumentProgress(user?.USER_ID || 0)
       ])
@@ -54,7 +61,11 @@ export function DivisionManagerDashboard() {
 
       if (tasksRes.success) {
         const taskData = tasksRes.data || []
-        setTasks(taskData.slice(0, 10))
+        if (isRegionalDirector) {
+          setAllOrgTasks(taskData)
+        } else {
+          setTasks(taskData.slice(0, 10))
+        }
       }
 
       if (postsRes.success) {
@@ -128,6 +139,42 @@ export function DivisionManagerDashboard() {
     }
   }
 
+  // Check if task is overdue
+  const isTaskOverdue = (dueDate: string, status: string): boolean => {
+    if (status === 'completed') return false
+    const due = new Date(dueDate)
+    const now = new Date()
+    return due < now
+  }
+
+  // Sort tasks with overdue first, completed last
+  const sortTasksByUrgency = (tasks: any[]): any[] => {
+    return [...tasks].sort((a, b) => {
+      const aOverdue = isTaskOverdue(a.DUE_DATE, a.STATUS)
+      const bOverdue = isTaskOverdue(b.DUE_DATE, b.STATUS)
+      
+      // Overdue tasks first
+      if (aOverdue && !bOverdue) return -1
+      if (!aOverdue && bOverdue) return 1
+      
+      // Both overdue or both not overdue, sort by status priority
+      const statusPriority: { [key: string]: number } = {
+        'pending': 1,
+        'in_progress': 2,
+        'completed': 3,
+        'cancelled': 4
+      }
+      
+      const aPriority = statusPriority[a.STATUS] || 5
+      const bPriority = statusPriority[b.STATUS] || 5
+      
+      if (aPriority !== bPriority) return aPriority - bPriority
+      
+      // If same status, sort by due date
+      return new Date(a.DUE_DATE).getTime() - new Date(b.DUE_DATE).getTime()
+    })
+  }
+
   const getNextStepRole = (status: string) => {
     switch (status) {
       case 'Submitted':
@@ -174,7 +221,7 @@ export function DivisionManagerDashboard() {
             <div className="header-content">
               <div className="header-icon">🏢</div>
               <div className="header-text">
-                <h1>Division Dashboard</h1>
+                <h1>Regional Director Dashboard</h1>
                 <p>Welcome back, {user?.NAME}</p>
               </div>
             </div>
@@ -207,7 +254,7 @@ export function DivisionManagerDashboard() {
           <div className="header-content">
             <div className="header-icon">🏢</div>
             <div className="header-text">
-              <h1>Division Dashboard</h1>
+              <h1>Regional Director Dashboard</h1>
               <p>Welcome back, {user?.NAME}</p>
               <div className="header-date">
                 {new Date().toLocaleDateString('en-US', { 
@@ -281,6 +328,114 @@ export function DivisionManagerDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Task List for Regional Director */}
+      {isRegionalDirector && (
+        <div className="document-status-section" style={{ marginTop: '24px', marginBottom: '24px' }}>
+          <div className="section-title-bar">
+            <h2>Pending & Overdue Tasks</h2>
+          </div>
+          <div className="document-status-content" style={{ padding: '20px' }}>
+            {loading ? (
+              <div className="empty-state" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Loading...</div>
+            ) : allOrgTasks.length === 0 ? (
+              <div className="empty-state" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>No tasks found</div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
+                      <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>Task Title</th>
+                      <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>Assigned To</th>
+                      <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>Assigned By</th>
+                      <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>Status</th>
+                      <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>Due Date</th>
+                      <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>Delay Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortTasksByUrgency(allOrgTasks).map(task => {
+                      const overdue = isTaskOverdue(task.DUE_DATE, task.STATUS)
+                      return (
+                        <tr 
+                          key={task.TASK_ID} 
+                          style={{ 
+                            borderBottom: '1px solid #e2e8f0',
+                            backgroundColor: overdue ? '#fef2f2' : task.STATUS === 'completed' ? '#f8fafc' : 'white',
+                            borderLeft: overdue ? '4px solid #ef4444' : 'none'
+                          }}
+                        >
+                          <td style={{ padding: '12px' }}>
+                            <div style={{ fontWeight: '600', fontSize: '14px', color: '#1e293b' }}>{task.TITLE}</div>
+                            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>{task.DESCRIPTION}</div>
+                          </td>
+                          <td style={{ padding: '12px', fontSize: '14px', color: '#1e293b' }}>
+                            {task.assignedTo?.NAME || task.ASSIGNED_TO_NAME || 'Unknown'}
+                          </td>
+                          <td style={{ padding: '12px', fontSize: '14px', color: '#1e293b' }}>
+                            {task.assignedBy?.NAME || task.ASSIGNED_BY_NAME || 'Unknown'}
+                          </td>
+                          <td style={{ padding: '12px' }}>
+                            {getTaskStatusBadge(task.STATUS)}
+                          </td>
+                          <td style={{ padding: '12px', fontSize: '14px', color: '#1e293b' }}>
+                            {formatDate(task.DUE_DATE)}
+                          </td>
+                          <td style={{ padding: '12px' }}>
+                            {overdue ? (
+                              <span style={{ 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                padding: '4px 8px', 
+                                borderRadius: '12px', 
+                                fontSize: '10px', 
+                                fontWeight: '600', 
+                                backgroundColor: '#fee2e2', 
+                                color: '#991b1b',
+                                textTransform: 'uppercase'
+                              }}>
+                                OVERDUE
+                              </span>
+                            ) : task.STATUS === 'completed' ? (
+                              <span style={{ 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                padding: '4px 8px', 
+                                borderRadius: '12px', 
+                                fontSize: '10px', 
+                                fontWeight: '600', 
+                                backgroundColor: '#f3f4f6', 
+                                color: '#6b7280',
+                                textTransform: 'uppercase'
+                              }}>
+                                COMPLETED
+                              </span>
+                            ) : (
+                              <span style={{ 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                padding: '4px 8px', 
+                                borderRadius: '12px', 
+                                fontSize: '10px', 
+                                fontWeight: '600', 
+                                backgroundColor: '#dcfce7', 
+                                color: '#166534',
+                                textTransform: 'uppercase'
+                              }}>
+                                ON TIME
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="staff-dashboard-content">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'start' }}>
@@ -454,7 +609,7 @@ export function DivisionManagerDashboard() {
                       </span>
                     </td>
                     <td style={{ textAlign: 'center', padding: '12px 8px' }}>
-                      <div className="document-date" style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                      <div className="document-date" style={{ fontSize: '0.875rem', color: '#6b7280', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                         {doc.LAST_UPDATED ? formatDate(doc.LAST_UPDATED) : 'N/A'}
                       </div>
                     </td>

@@ -1357,6 +1357,105 @@ exports.sendBackToSectionHead = async (req, res) => {
   }
 };
 
+// Get all tasks for oversight (Regional Director)
+exports.getAllTasksForOversight = async (req, res) => {
+  try {
+    const userRole = req.user.role;
+
+    // Only Regional Directors can access this endpoint
+    if (userRole !== 'regional_director') {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Only Regional Directors can access all tasks for oversight' 
+      });
+    }
+
+    const query = `
+      SELECT 
+        t.TASK_ID,
+        t.TITLE,
+        t.DESCRIPTION,
+        t.ASSIGNED_TO,
+        t.ASSIGNED_BY,
+        t.DUE_DATE,
+        t.PRIORITY,
+        t.CATEGORY,
+        t.TAGS,
+        t.STATUS as TASK_STATUS,
+        t.CREATED_AT,
+        t.UPDATED_AT,
+        t.REQUIRES_DOCUMENT,
+        t.SECTION_ID,
+        t.LINKED_DOCUMENT_ID,
+        assigner.NAME as ASSIGNED_BY_NAME,
+        assignee.NAME as ASSIGNED_TO_NAME,
+        s.NAME as SECTION_NAME,
+        s.DIVISION_ID,
+        d.NAME as DIVISION_NAME
+      FROM TASK t
+      LEFT JOIN user assigner ON t.ASSIGNED_BY = assigner.USER_ID
+      LEFT JOIN user assignee ON t.ASSIGNED_TO = assignee.USER_ID
+      LEFT JOIN section s ON t.SECTION_ID = s.SECTION_ID
+      LEFT JOIN division d ON s.DIVISION_ID = d.DIVISION_ID
+      ORDER BY 
+        CASE 
+          WHEN t.DUE_DATE < CURDATE() AND t.STATUS != 'completed' THEN 1
+          WHEN t.STATUS = 'pending' THEN 2
+          WHEN t.STATUS = 'in_progress' THEN 3
+          WHEN t.STATUS = 'completed' THEN 4
+          ELSE 5
+        END,
+        t.DUE_DATE ASC
+    `;
+
+    const [rawTasks] = await pool.query(query);
+
+    // Transform the flat query results into nested structure
+    const tasks = rawTasks.map(task => ({
+      TASK_ID: task.TASK_ID,
+      TITLE: task.TITLE,
+      DESCRIPTION: task.DESCRIPTION,
+      ASSIGNED_TO: task.ASSIGNED_TO,
+      ASSIGNED_BY: task.ASSIGNED_BY,
+      DUE_DATE: task.DUE_DATE,
+      PRIORITY: task.PRIORITY,
+      CATEGORY: task.CATEGORY,
+      TAGS: task.TAGS,
+      STATUS: task.TASK_STATUS,
+      CREATED_AT: task.CREATED_AT,
+      UPDATED_AT: task.UPDATED_AT,
+      REQUIRES_DOCUMENT: task.REQUIRES_DOCUMENT,
+      SECTION_ID: task.SECTION_ID,
+      LINKED_DOCUMENT_ID: task.LINKED_DOCUMENT_ID,
+      assignedBy: task.ASSIGNED_BY_NAME ? {
+        USER_ID: task.ASSIGNED_BY,
+        NAME: task.ASSIGNED_BY_NAME
+      } : null,
+      assignedTo: task.ASSIGNED_TO_NAME ? {
+        USER_ID: task.ASSIGNED_TO,
+        NAME: task.ASSIGNED_TO_NAME
+      } : null,
+      section: task.SECTION_NAME ? {
+        SECTION_ID: task.SECTION_ID,
+        NAME: task.SECTION_NAME,
+        DIVISION_ID: task.DIVISION_ID
+      } : null,
+      division: task.DIVISION_NAME ? {
+        DIVISION_ID: task.DIVISION_ID,
+        NAME: task.DIVISION_NAME
+      } : null
+    }));
+
+    res.json({
+      success: true,
+      data: tasks
+    });
+  } catch (error) {
+    console.error('Get all tasks for oversight error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch all tasks' });
+  }
+};
+
 // Helper function to create notifications
 async function createNotification({ userId, type, title, message, actionUrl }) {
   try {
