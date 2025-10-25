@@ -9,9 +9,11 @@ import { StaffTopbar } from './components/staff/StaffTopbar'
 import { StaffSidebar } from './components/staff/StaffSidebar'
 import { StaffDashboard } from './components/staff/StaffDashboard'
 import { StaffDocumentWorks } from './components/staff/StaffDocumentWorks'
+import { StaffTaskDetail } from './components/staff/StaffTaskDetail'
 import { StaffTasks } from './components/staff/StaffTasks'
 import { StaffNotifications } from './components/staff/StaffNotifications'
 import { StaffFeedback } from './components/staff/StaffFeedback'
+import { StaffSettings } from './components/staff/StaffSettings'
 import { AdminTopbar } from './components/admin/AdminTopbar'
 import { AdminDashboard } from './components/admin/AdminDashboard'
 import { AdminDocuments } from './components/admin/AdminDocuments'
@@ -26,6 +28,7 @@ import { AdminUsers } from './components/admin/AdminUsers'
 import { AdminTools } from './components/admin/AdminTools'
 import { AdminAccountManagement } from './components/admin/AdminAccountManagement'
 import { AuthProvider } from './contexts/AuthContext'
+import { DialogProvider } from './components/ui/DialogProvider'
 
 // Import role-specific components
 import { DynamicSidebar } from './components/sidebars/DynamicSidebar'
@@ -39,6 +42,7 @@ import SectionUnitHeadNotifications from './components/section-unit-head/Section
 import SectionUnitHeadFeedback from './components/section-unit-head/SectionUnitHeadFeedback'
 import { SectionUnitHeadPosts } from './components/section-unit-head/SectionUnitHeadPosts'
 import { SectionUnitHeadDocumentWorks } from './components/section-unit-head/SectionUnitHeadDocumentWorks'
+import SectionUnitHeadTaskDetail from './components/section-unit-head/SectionUnitHeadTaskDetail.tsx'
 
 // Division Manager components
 import { DivisionManagerTaskAssignment } from './components/division-manager/DivisionManagerTaskAssignment'
@@ -48,10 +52,9 @@ import { DivisionManagerDocumentWorks } from './components/division-manager/Divi
 import { DivisionManagerPosts } from './components/division-manager/DivisionManagerPosts'
 import DivisionManagerFeedback from './components/division-manager/DivisionManagerFeedback'
 import DivisionManagerNotifications from './components/division-manager/DivisionManagerNotifications'
+import DivisionManagerTaskDetail from './components/division-manager/DivisionManagerTaskDetail.tsx'
 
 // Regional Director components
-import { RegionalDirectorProgressOversight } from './components/regional-director/RegionalDirectorProgressOversight'
-import { RegionalDirectorReview } from './components/regional-director/RegionalDirectorReview'
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = React.useState(true)
@@ -62,7 +65,8 @@ function App() {
 
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <DialogProvider>
+        <BrowserRouter>
         <Routes>
           <Route path="/" element={<LoginPage />} />
           <Route path="/login" element={<LoginPage />} />
@@ -106,10 +110,11 @@ function App() {
                     <Routes>
                       <Route path="/" element={<StaffDashboard />} />
                       <Route path="/work" element={<StaffDocumentWorks />} />
+                      <Route path="/work/:taskId" element={<StaffTaskDetail />} />
                       <Route path="/tasks" element={<StaffTasks />} />
                       <Route path="/notifications" element={<StaffNotifications />} />
                       <Route path="/feedback" element={<StaffFeedback />} />
-                      <Route path="/settings" element={<div className="page"><h1>Settings</h1><p>Settings page coming soon...</p></div>} />
+                      <Route path="/settings" element={<StaffSettings />} />
                     </Routes>
                   </div>
                 </main>
@@ -128,11 +133,13 @@ function App() {
                     <Routes>
                       <Route path="/" element={<SectionUnitHeadDashboard />} />
                       <Route path="/work" element={<SectionUnitHeadDocumentWorks />} />
+                      <Route path="/work/:taskId" element={<SectionUnitHeadTaskDetail />} />
                       <Route path="/tasks" element={<SectionUnitHeadTasks />} />
                       <Route path="/notifications" element={<SectionUnitHeadNotifications />} />
                       <Route path="/feedback" element={<SectionUnitHeadFeedback />} />
                       <Route path="/reports" element={<SectionUnitHeadReports />} />
                       <Route path="/posts" element={<SectionUnitHeadPosts />} />
+                      <Route path="/settings" element={<StaffSettings />} />
                     </Routes>
                   </div>
                 </main>
@@ -151,13 +158,16 @@ function App() {
                     <Routes>
                       <Route path="/" element={<DivisionManagerDashboard />} />
                       <Route path="/work" element={<DivisionManagerDocumentWorks />} />
+                      <Route path="/work/:taskId" element={<DivisionManagerTaskDetail />} />
                       <Route path="/task-assignment" element={<DivisionManagerTaskAssignment />} />
+                      <Route path="/task-assignment/:taskId" element={<DivisionManagerTaskDetail />} />
                       <Route path="/reports" element={<SectionUnitHeadReports />} />
                       <Route path="/posts" element={<DivisionManagerPosts />} />
                       <Route path="/send-to-regional" element={<DivisionManagerSendToRegional />} />
                       <Route path="/tasks" element={<div className="page"><h1>Tasks</h1><p>Coming soon...</p></div>} />
                       <Route path="/notifications" element={<DivisionManagerNotifications />} />
                       <Route path="/feedback" element={<DivisionManagerFeedback />} />
+                      <Route path="/settings" element={<StaffSettings />} />
                     </Routes>
                   </div>
                 </main>
@@ -175,8 +185,9 @@ function App() {
                   <div className="content">
                     <Routes>
                       <Route path="/" element={<DivisionManagerDashboard />} />
-                      <Route path="/review" element={<RegionalDirectorReview />} />
-                      <Route path="/progress-oversight" element={<RegionalDirectorProgressOversight />} />
+                      <Route path="/reports" element={<SectionUnitHeadReports />} />
+                      <Route path="/notifications" element={<DivisionManagerNotifications />} />
+                      <Route path="/settings" element={<StaffSettings />} />
                     </Routes>
                   </div>
                 </main>
@@ -184,7 +195,8 @@ function App() {
             </ProtectedRoute>
           } />
         </Routes>
-      </BrowserRouter>
+        </BrowserRouter>
+      </DialogProvider>
     </AuthProvider>
   )
 }

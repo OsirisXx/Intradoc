@@ -1,6 +1,7 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { API_URL } from '../../services/apiClient'
 import { authService } from '../../services/auth'
 
 interface AdminTopbarProps {
@@ -55,7 +56,15 @@ export function AdminTopbar({ onToggleSidebar }: AdminTopbarProps) {
             className="avatar-dropdown" 
             onClick={() => setShowDropdown(!showDropdown)}
           >
-            <div className="avatar" />
+            {user?.PROFILE_IMAGE ? (
+              <img 
+                src={user.PROFILE_IMAGE.startsWith('http') ? user.PROFILE_IMAGE : API_URL.replace(/\/api$/, '') + user.PROFILE_IMAGE} 
+                alt="Profile" 
+                className="avatar-img"
+              />
+            ) : (
+              <div className="avatar" />
+            )}
             <svg className="dropdown-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none">
               <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>

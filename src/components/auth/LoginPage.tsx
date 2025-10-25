@@ -1,6 +1,7 @@
 import React from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { useDialogContext } from '../ui/DialogProvider'
 import { authService, loginAPI, registerAPI } from '../../services/auth'
 import type { FunctionalRole, OrganizationalAssignment } from '../../types/index'
 
@@ -18,15 +19,28 @@ export function LoginPage() {
   const [organizationalAssignments, setOrganizationalAssignments] = React.useState<OrganizationalAssignment[]>([])
   const navigate = useNavigate()
   const location = useLocation()
-  const { login, isAuthenticated } = useAuth()
+  const { login, isAuthenticated, user } = useAuth()
+  const { showSuccess } = useDialogContext()
 
   // Redirect if already authenticated
   React.useEffect(() => {
-    if (isAuthenticated) {
-      const from = location.state?.from?.pathname || '/'
-      navigate(from, { replace: true })
+    if (isAuthenticated && user) {
+      // Redirect to role-specific home page instead of previous location
+      if (user.FUNCTIONAL_ROLE === 'admin') {
+        navigate('/admin', { replace: true })
+      } else if (user.FUNCTIONAL_ROLE === 'staff') {
+        navigate('/staff', { replace: true })
+      } else if (user.FUNCTIONAL_ROLE === 'section_unit_head') {
+        navigate('/section-unit-head', { replace: true })
+      } else if (user.FUNCTIONAL_ROLE === 'division_manager') {
+        navigate('/division-manager', { replace: true })
+      } else if (user.FUNCTIONAL_ROLE === 'regional_director') {
+        navigate('/regional-director', { replace: true })
+      } else {
+        navigate('/staff', { replace: true }) // Default fallback
+      }
     }
-  }, [isAuthenticated, navigate, location.state?.from?.pathname])
+  }, [isAuthenticated, user, navigate])
 
   // Load organizational assignments when switching to registration
   React.useEffect(() => {
@@ -52,7 +66,7 @@ export function LoginPage() {
       const response = await loginAPI({ email, password })
       
       if (response.success && response.user) {
-        login(response.user)
+        await login(response.user)
         
         // Redirect based on role
         if (response.user.FUNCTIONAL_ROLE === 'admin') {
@@ -60,11 +74,11 @@ export function LoginPage() {
         } else if (response.user.FUNCTIONAL_ROLE === 'staff') {
           navigate('/staff')
         } else if (response.user.FUNCTIONAL_ROLE === 'section_unit_head') {
-          navigate('/section-unit-head/task-assignment')
+          navigate('/section-unit-head')
         } else if (response.user.FUNCTIONAL_ROLE === 'division_manager') {
-          navigate('/division-manager/review')
+          navigate('/division-manager')
         } else if (response.user.FUNCTIONAL_ROLE === 'regional_director') {
-          navigate('/regional-director/review')
+          navigate('/regional-director')
         } else {
           navigate('/staff') // Default fallback
         }
@@ -98,7 +112,7 @@ export function LoginPage() {
       })
 
       if (response.success) {
-        alert(response.message || 'Registration request submitted. Awaiting approval from ICT Office.')
+        showSuccess(response.message || 'Registration request submitted. Awaiting approval from ICT Office.')
         setIsRegistering(false) // Go back to login form
         setRegisterName('')
         setRegisterIdNumber('')

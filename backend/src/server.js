@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
+const fs = require('fs').promises;
+const { detect } = require('detect-port');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const { testConnection } = require('./config/database');
@@ -17,7 +19,7 @@ const usersRoutes = require('./routes/users.routes');
 const postsRoutes = require('./routes/posts.routes');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const DEFAULT_PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors({
@@ -52,13 +54,37 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, error: 'Internal server error' });
 });
 
-// Start server
+// Start server with dynamic port detection
 async function startServer() {
   await testConnection(); // Test database connection first
   
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log(`📚 API Documentation: http://localhost:${PORT}/api/health`);
+  // Detect available port
+  const PORT = await detect(DEFAULT_PORT);
+  
+  // Ensure both are numbers for comparison
+  const portNum = Number(PORT);
+  const defaultPortNum = Number(DEFAULT_PORT);
+  
+  if (portNum !== defaultPortNum) {
+    console.log(`⚠️  Port ${defaultPortNum} is in use, using port ${portNum} instead`);
+  } else {
+    console.log(`✅ Using port ${portNum}`);
+  }
+  
+  // Write the actual port to .env.local for frontend
+  const envPath = path.join(__dirname, '../../.env.local');
+  const envContent = `VITE_API_URL=http://localhost:${portNum}/api\n`;
+  
+  try {
+    await fs.writeFile(envPath, envContent);
+    console.log(`📝 Frontend configuration written to .env.local`);
+  } catch (error) {
+    console.warn(`⚠️  Could not write .env.local file: ${error.message}`);
+  }
+  
+  app.listen(portNum, () => {
+    console.log(`🚀 Server running on http://localhost:${portNum}`);
+    console.log(`📚 API Documentation: http://localhost:${portNum}/api/health`);
   });
 }
 

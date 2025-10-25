@@ -13,6 +13,7 @@ exports.getUserNotifications = async (req, res) => {
         sn.TITLE,
         sn.MESSAGE,
         sn.ACTION_URL,
+        sn.RELATED_TASK_ID,
         sn.IS_READ,
         sn.CREATED_AT
       FROM SYSTEM_NOTIFICATION sn

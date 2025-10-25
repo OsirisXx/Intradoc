@@ -3,7 +3,7 @@ import SectionUnitHeadNotifications from '../section-unit-head/SectionUnitHeadNo
 import '../section-unit-head/SectionUnitHead.css'
 
 export default function DivisionManagerNotifications() {
-  return <SectionUnitHeadNotifications />
+  return <SectionUnitHeadNotifications roleBasePath="/division-manager" />
 }
 
 

@@ -5,11 +5,10 @@ import * as Types from '../types'
 export class ReminderService {
   private static instance: ReminderService
   private notificationService: NotificationService
-  private reminderIntervals: Map<number, NodeJS.Timeout> = new Map()
+  private reminderIntervals: Map<number, number> = new Map()
   private checkedTasks: Set<number> = new Set()
   private readonly REMINDER_CHECK_INTERVAL = 60000 // 1 minute
   private readonly DUE_SOON_HOURS = 24 // 24 hours before due date
-  private readonly OVERDUE_CHECK_INTERVAL = 300000 // 5 minutes
 
   private constructor() {
     this.notificationService = NotificationService.getInstance()
@@ -173,11 +172,11 @@ export class ReminderService {
   /**
    * Check for overdue tasks across all users (for managers)
    */
-  async checkOverdueTasksForAllUsers(): Promise<void> {
+  async checkOverdueTasksForAllUsers(userId: number): Promise<void> {
     try {
       // This would typically be called by a background service
       // For now, we'll check the current user's tasks
-      const response = await apiService.getOverdueTasks()
+      const response = await apiService.getOverdueTasks(userId)
       if (response.success && response.data) {
         const overdueTasks = response.data
         

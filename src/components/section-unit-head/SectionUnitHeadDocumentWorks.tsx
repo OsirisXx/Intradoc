@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { apiService } from '../../services/api'
 import * as Types from '../../types'
@@ -7,6 +8,7 @@ import './SectionUnitHead.css'
 
 export function SectionUnitHeadDocumentWorks() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<'assigned' | 'delayed'>('assigned')
   const [assignedTasks, setAssignedTasks] = useState<Types.TaskWithDetails[]>([])
   const [delayedTasks, setDelayedTasks] = useState<Types.TaskWithDetails[]>([])
@@ -69,8 +71,7 @@ export function SectionUnitHeadDocumentWorks() {
   }
 
   const handleTaskClick = (task: Types.TaskWithDetails) => {
-    setSelectedTask(task)
-    setShowUploadModal(true)
+    navigate(`/section-unit-head/work/${task.TASK_ID}`)
   }
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -287,7 +288,7 @@ export function SectionUnitHeadDocumentWorks() {
                       <td>{task.TITLE}</td>
                       <td>{getTaskStatusBadge(task.STATUS)}</td>
                       <td>
-                        {task.LINKED_DOCUMENT_ID ? (
+                        {task.STATUS === 'completed' && task.LINKED_DOCUMENT_ID ? (
                           <span style={{
                             padding: '2px 6px',
                             borderRadius: '4px',

@@ -130,11 +130,10 @@ exports.uploadDocument = [upload.single('file'), async (req, res) => {
 
     // Update task status if linked to task
     if (fulfillsTaskId) {
-      // Update the task's LINKED_DOCUMENT_ID to create bidirectional link
-      await pool.query(
-        'UPDATE TASK SET LINKED_DOCUMENT_ID = ?, STATUS = "in_progress", UPDATED_AT = NOW() WHERE TASK_ID = ?',
-        [result.insertId, fulfillsTaskId]
-      );
+      // Link this document to the task as an attachment (store taskId in ASSIGNED_TO)
+      await pool.query('UPDATE document SET ASSIGNED_TO = ? WHERE DOCUMENT_ID = ?', [fulfillsTaskId, result.insertId]);
+      // Keep task in in_progress on first upload; don't overwrite submitted/completed
+      await pool.query('UPDATE TASK SET STATUS = CASE WHEN STATUS IN ("pending") THEN "in_progress" ELSE STATUS END, UPDATED_AT = NOW() WHERE TASK_ID = ?', [fulfillsTaskId]);
       console.log(`Document ${result.insertId} linked to task ID: ${fulfillsTaskId}`);
     }
 
@@ -154,6 +153,52 @@ exports.uploadDocument = [upload.single('file'), async (req, res) => {
 
 // Export multer upload middleware for use in routes
 exports.upload = upload;
+
+// Delete a document with task lock rules
+exports.deleteDocument = async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const userId = req.user.userId;
+
+    const [docs] = await pool.query('SELECT * FROM document WHERE DOCUMENT_ID = ?', [documentId]);
+    if (docs.length === 0) {
+      return res.status(404).json({ success: false, error: 'Document not found' });
+    }
+    const doc = docs[0];
+
+    // Only creator can delete
+    if (doc.CREATED_BY !== userId) {
+      return res.status(403).json({ success: false, error: 'You can only delete your own document' });
+    }
+
+    // If linked to a task via ASSIGNED_TO, ensure task is not submitted
+    if (doc.ASSIGNED_TO) {
+      const [tasks] = await pool.query('SELECT STATUS FROM TASK WHERE TASK_ID = ?', [doc.ASSIGNED_TO]);
+      if (tasks.length > 0 && tasks[0].STATUS === 'submitted') {
+        return res.status(400).json({ success: false, error: 'Cannot delete attachment while task is submitted. Unsubmit first.' });
+      }
+    }
+
+    // Remove file from disk if local
+    if (doc.FILE_LINK && !(doc.FILE_LINK.startsWith('http://') || doc.FILE_LINK.startsWith('https://'))) {
+      try {
+        if (fs.existsSync(doc.FILE_LINK)) {
+          fs.unlinkSync(doc.FILE_LINK);
+        }
+      } catch (e) {
+        console.warn('Failed to remove file from disk:', e.message);
+      }
+    }
+
+    await pool.query('DELETE FROM document WHERE DOCUMENT_ID = ?', [documentId]);
+    await pool.query('DELETE FROM document_status WHERE DOCUMENT_ID = ?', [documentId]);
+
+    res.json({ success: true, message: 'Document deleted' });
+  } catch (error) {
+    console.error('Delete document error:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete document' });
+  }
+};
 
 // Get documents pending review (role-based)
 exports.getPendingReview = async (req, res) => {
@@ -236,8 +281,8 @@ exports.approveDocument = async (req, res) => {
   try {
     const { documentId } = req.params;
     const { remarks } = req.body;
-    const userId = req.user.userId;
-    const userRole = req.user.role;
+    const userId = req.user.USER_ID || req.user.userId;
+    const userRole = req.user.FUNCTIONAL_ROLE || req.user.role;
 
     // Get document details
     const [documents] = await pool.query('SELECT * FROM document WHERE DOCUMENT_ID = ?', [documentId]);
@@ -501,6 +546,75 @@ exports.updateDocumentStatus = async (req, res) => {
   }
 };
 
+// Get document progress for a specific user
+exports.getDocumentProgress = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Get user role
+    const [users] = await pool.query('SELECT FUNCTIONAL_ROLE FROM user WHERE USER_ID = ?', [userId]);
+    if (users.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    const userRole = users[0].FUNCTIONAL_ROLE;
+    const isRegionalDirector = userRole === 'regional_director';
+    const isDivisionManager = userRole === 'division_manager';
+    const canSeeAllDocuments = isRegionalDirector || isDivisionManager;
+    
+    // Build WHERE clause based on role
+    const whereClause = canSeeAllDocuments 
+      ? 'WHERE 1=1' // Regional Director and Division Manager see all documents
+      : 'WHERE d.CREATED_BY = ?';
+    
+    const queryParams = canSeeAllDocuments ? [] : [userId, userId];
+    
+    const subqueryWhere = canSeeAllDocuments
+      ? 'WHERE 1=1'
+      : 'WHERE d2.CREATED_BY = ?';
+    
+    const [documents] = await pool.query(
+      `SELECT 
+        d.DOCUMENT_ID,
+        d.TITLE,
+        d.SECTION_ID,
+        d.FINGERPRINT_HASH,
+        s.NAME as SECTION_NAME,
+        ds.STATUS as CURRENT_STATUS,
+        ds.CREATED_AT as LAST_UPDATED
+      FROM document d
+      LEFT JOIN section s ON d.SECTION_ID = s.SECTION_ID
+      LEFT JOIN (
+        SELECT DOCUMENT_ID, STATUS, CREATED_AT
+        FROM document_status
+        WHERE STATUS_ID IN (
+          SELECT MAX(STATUS_ID)
+          FROM document_status
+          GROUP BY DOCUMENT_ID
+        )
+      ) ds ON d.DOCUMENT_ID = ds.DOCUMENT_ID
+      ${whereClause}
+        AND d.DOCUMENT_ID IN (
+          SELECT MAX(d2.DOCUMENT_ID)
+          FROM document d2
+          ${subqueryWhere}
+            AND d2.FINGERPRINT_HASH = d.FINGERPRINT_HASH
+          GROUP BY d2.FINGERPRINT_HASH
+        )
+      ORDER BY ds.CREATED_AT DESC`,
+      queryParams
+    );
+
+    res.json({
+      success: true,
+      data: documents
+    });
+  } catch (error) {
+    console.error('Get document progress error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch document progress' });
+  }
+};
+
 // Helper functions
 async function notifySectionHeadsForReview(sectionId, documentId, documentTitle) {
   try {
@@ -581,7 +695,7 @@ async function notifyRegionalDirectors(document, remarks) {
         type: 'document_forwarded',
         title: 'Document Forwarded for Review',
         message: `Document "${document.TITLE}" has been forwarded for final review`,
-        actionUrl: '/regional-director/review'
+        actionUrl: `/regional-director/reports?documentId=${document.DOCUMENT_ID}`
       });
     }
   } catch (error) {
@@ -623,12 +737,156 @@ async function createNotification({ userId, type, title, message, actionUrl }) {
   }
 }
 
-// Get documents by section
+// Approve forwarded document (Regional Director only)
+exports.approveForwardedDocument = async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const { remarks } = req.body;
+    const userId = req.user.userId;
+    const userRole = req.user.role;
+
+    if (userRole !== 'regional_director') {
+      return res.status(403).json({ success: false, error: 'Only Regional Directors can approve forwarded documents' });
+    }
+
+    // Get document details and verify it's forwarded
+    const [documents] = await pool.query('SELECT * FROM document WHERE DOCUMENT_ID = ? AND FORWARDED_TO_REGIONAL = 1', [documentId]);
+    if (documents.length === 0) {
+      return res.status(404).json({ success: false, error: 'Forwarded document not found' });
+    }
+
+    const document = documents[0];
+
+    // Check if already approved
+    const [existingApproval] = await pool.query(
+      'SELECT * FROM document_approval WHERE DOCUMENT_ID = ? AND ROLE = "regional_director" AND STATUS = 1',
+      [documentId]
+    );
+
+    if (existingApproval.length > 0) {
+      return res.status(400).json({ success: false, error: 'Document has already been approved' });
+    }
+
+    // Update document status to Approved_Forwarded
+    await pool.query(
+      'INSERT INTO document_status (DOCUMENT_ID, STATUS, REMARKS, CREATED_AT) VALUES (?, "Approved_Forwarded", ?, NOW())',
+      [documentId, remarks || 'Approved by Regional Director']
+    );
+
+    // Create approval record
+    await pool.query(
+      'INSERT INTO document_approval (DOCUMENT_ID, USER_ID, ROLE, STATUS, REMARKS, DATE_APPROVED) VALUES (?, ?, "regional_director", 1, ?, NOW())',
+      [documentId, userId, remarks || 'Approved by Regional Director']
+    );
+
+    // Archive the document
+    await pool.query(
+      'INSERT INTO archive (DOCUMENT_ID, ARCHIVED_BY, DATE_ARCHIVED) VALUES (?, ?, NOW())',
+      [documentId, userId]
+    );
+
+    // Send notifications
+    await createNotification({
+      userId: document.CREATED_BY,
+      type: 'document_approved_forwarded',
+      title: 'Forwarded Document Approved',
+      message: `Your forwarded document "${document.TITLE}" has been approved by the Regional Director`,
+      actionUrl: '/staff/work'
+    });
+
+    // Notify the forwarder (Division Manager)
+    if (document.FORWARDED_BY) {
+      await createNotification({
+        userId: document.FORWARDED_BY,
+        type: 'forwarded_document_approved',
+        title: 'Forwarded Document Approved',
+        message: `The document "${document.TITLE}" you forwarded has been approved by the Regional Director`,
+        actionUrl: '/division-manager/reports'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Forwarded document approved and archived successfully'
+    });
+  } catch (error) {
+    console.error('Approve forwarded document error:', error);
+    res.status(500).json({ success: false, error: 'Failed to approve forwarded document' });
+  }
+};
+
+// Get forwarded documents for Regional Directors
+exports.getForwardedDocuments = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const userRole = req.user.role;
+
+    if (userRole !== 'regional_director') {
+      return res.status(403).json({ success: false, error: 'Only Regional Directors can access forwarded documents' });
+    }
+
+    const [forwardedDocuments] = await pool.query(`
+      SELECT d.*, 
+             dc.NAME as CATEGORY_NAME,
+             s.NAME as SECTION_NAME,
+             creator.NAME as CREATED_BY_NAME,
+             creator.FUNCTIONAL_ROLE as CREATED_BY_ROLE,
+             forwarder.NAME as FORWARDED_BY_NAME,
+             forwarder.FUNCTIONAL_ROLE as FORWARDED_BY_ROLE,
+             ds.STATUS as CURRENT_STATUS,
+             ds.REMARKS as CURRENT_REMARKS,
+             ds.CREATED_AT as STATUS_DATE,
+             d.FORWARDED_AT,
+             d.FORWARDED_BY,
+             approval.DATE_APPROVED as APPROVAL_DATE,
+             approval.REMARKS as APPROVAL_REMARKS
+      FROM document d
+      LEFT JOIN document_category dc ON d.CATEGORY_ID = dc.CATEGORY_ID
+      LEFT JOIN section s ON d.SECTION_ID = s.SECTION_ID
+      LEFT JOIN user creator ON d.CREATED_BY = creator.USER_ID
+      LEFT JOIN user forwarder ON d.FORWARDED_BY = forwarder.USER_ID
+      LEFT JOIN (
+        SELECT DOCUMENT_ID, STATUS, REMARKS, CREATED_AT
+        FROM document_status 
+        WHERE STATUS_ID IN (
+          SELECT MAX(STATUS_ID) 
+          FROM document_status 
+          GROUP BY DOCUMENT_ID
+        )
+      ) ds ON d.DOCUMENT_ID = ds.DOCUMENT_ID
+      LEFT JOIN (
+        SELECT DOCUMENT_ID, DATE_APPROVED, REMARKS
+        FROM document_approval 
+        WHERE STATUS = 1 AND ROLE = 'regional_director'
+        AND DOCUMENT_ID IN (
+          SELECT DOCUMENT_ID FROM document WHERE FORWARDED_TO_REGIONAL = 1
+        )
+      ) approval ON d.DOCUMENT_ID = approval.DOCUMENT_ID
+      WHERE d.FORWARDED_TO_REGIONAL = 1
+      ORDER BY d.FORWARDED_AT DESC
+    `);
+
+    res.json({
+      success: true,
+      data: forwardedDocuments
+    });
+  } catch (error) {
+    console.error('Get forwarded documents error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch forwarded documents' });
+  }
+};
+
+// Get documents by section (including forwarded documents for Division Managers)
 exports.getDocumentsBySection = async (req, res) => {
   try {
     const { sectionId } = req.params;
+    const userId = req.user.userId;
+    const userRole = req.user.role;
     
-    const [documents] = await pool.query(`
+    let documents = [];
+    
+    // Get regular section documents (deduplicated by fingerprint hash)
+    const [sectionDocuments] = await pool.query(`
       SELECT d.*, 
              dc.NAME as CATEGORY_NAME,
              s.NAME as SECTION_NAME,
@@ -636,7 +894,8 @@ exports.getDocumentsBySection = async (req, res) => {
              u.FUNCTIONAL_ROLE as CREATED_BY_ROLE,
              ds.STATUS as CURRENT_STATUS,
              ds.REMARKS as CURRENT_REMARKS,
-             ds.CREATED_AT as STATUS_DATE
+             ds.CREATED_AT as STATUS_DATE,
+             'regular' as DOCUMENT_TYPE
       FROM document d
       LEFT JOIN document_category dc ON d.CATEGORY_ID = dc.CATEGORY_ID
       LEFT JOIN section s ON d.SECTION_ID = s.SECTION_ID
@@ -651,8 +910,120 @@ exports.getDocumentsBySection = async (req, res) => {
         )
       ) ds ON d.DOCUMENT_ID = ds.DOCUMENT_ID
       WHERE d.SECTION_ID = ?
+        AND d.DOCUMENT_ID IN (
+          SELECT MAX(d2.DOCUMENT_ID)
+          FROM document d2
+          WHERE d2.SECTION_ID = ?
+            AND d2.FINGERPRINT_HASH = d.FINGERPRINT_HASH
+          GROUP BY d2.FINGERPRINT_HASH
+        )
       ORDER BY d.CREATED_AT DESC
-    `, [sectionId]);
+    `, [sectionId, sectionId]);
+    
+    documents = sectionDocuments;
+    
+    // If user is Division Manager, also get forwarded documents
+    if (userRole === 'division_manager') {
+      const [forwardedDocuments] = await pool.query(`
+        SELECT d.*, 
+               dc.NAME as CATEGORY_NAME,
+               s.NAME as SECTION_NAME,
+               u.NAME as CREATED_BY_NAME,
+               u.FUNCTIONAL_ROLE as CREATED_BY_ROLE,
+               ds.STATUS as CURRENT_STATUS,
+               ds.REMARKS as CURRENT_REMARKS,
+               ds.CREATED_AT as STATUS_DATE,
+               'forwarded' as DOCUMENT_TYPE,
+               da.USER_ID as FORWARDED_BY_USER_ID,
+               fu.NAME as FORWARDED_BY_NAME,
+               da.ROLE as FORWARDED_BY_ROLE,
+               da.REMARKS as FORWARDED_REMARKS
+        FROM document d
+        LEFT JOIN document_category dc ON d.CATEGORY_ID = dc.CATEGORY_ID
+        LEFT JOIN section s ON d.SECTION_ID = s.SECTION_ID
+        LEFT JOIN user u ON d.CREATED_BY = u.USER_ID
+        LEFT JOIN (
+          SELECT DOCUMENT_ID, STATUS, REMARKS, CREATED_AT
+          FROM document_status 
+          WHERE STATUS_ID IN (
+            SELECT MAX(STATUS_ID) 
+            FROM document_status 
+            GROUP BY DOCUMENT_ID
+          )
+        ) ds ON d.DOCUMENT_ID = ds.DOCUMENT_ID
+        LEFT JOIN (
+          SELECT DOCUMENT_ID, USER_ID, ROLE, REMARKS
+          FROM document_approval 
+          WHERE STATUS = 1 AND (REMARKS LIKE 'Forwarded by%' OR REMARKS LIKE '%forwarded%')
+        ) da ON d.DOCUMENT_ID = da.DOCUMENT_ID
+        LEFT JOIN user fu ON da.USER_ID = fu.USER_ID
+        WHERE d.ASSIGNED_TO = -? 
+          AND s.DIVISION_ID = (
+            SELECT s2.DIVISION_ID 
+            FROM section s2 
+            JOIN user u2 ON s2.SECTION_ID = u2.SECTION_ID 
+            WHERE u2.USER_ID = ? AND u2.FUNCTIONAL_ROLE = 'division_manager'
+          )
+          AND d.DOCUMENT_ID IN (
+            SELECT MAX(d2.DOCUMENT_ID)
+            FROM document d2
+            LEFT JOIN section s2 ON d2.SECTION_ID = s2.SECTION_ID
+            WHERE d2.ASSIGNED_TO = -?
+              AND s2.DIVISION_ID = (
+                SELECT s3.DIVISION_ID 
+                FROM section s3 
+                JOIN user u3 ON s3.SECTION_ID = u3.SECTION_ID 
+                WHERE u3.USER_ID = ? AND u3.FUNCTIONAL_ROLE = 'division_manager'
+              )
+              AND d2.FINGERPRINT_HASH = d.FINGERPRINT_HASH
+            GROUP BY d2.FINGERPRINT_HASH
+          )
+        ORDER BY d.CREATED_AT DESC
+      `, [userId, userId, userId, userId]);
+      
+      documents = [...documents, ...forwardedDocuments];
+      
+      // Debug: Log forwarded documents to see what data we're getting
+      console.log('Forwarded documents count:', forwardedDocuments.length);
+      console.log('Forwarded documents data:', JSON.stringify(forwardedDocuments, null, 2));
+      
+      // Debug: Check approval records for forwarded documents
+      if (forwardedDocuments.length > 0) {
+        const docIds = forwardedDocuments.map(doc => doc.DOCUMENT_ID);
+        const [approvalRecords] = await pool.query(
+          'SELECT * FROM document_approval WHERE DOCUMENT_ID IN (?)',
+          [docIds]
+        );
+        console.log('Approval records for forwarded documents:', JSON.stringify(approvalRecords, null, 2));
+      }
+      
+      // Final deduplication: if both regular and forwarded documents exist with same fingerprint hash,
+      // keep only the most recent one (highest DOCUMENT_ID)
+      const deduplicatedDocuments = [];
+      const fingerprintMap = new Map();
+      
+      documents.forEach(doc => {
+        const existing = fingerprintMap.get(doc.FINGERPRINT_HASH);
+        if (!existing) {
+          fingerprintMap.set(doc.FINGERPRINT_HASH, doc);
+        } else {
+          // Prioritize forwarded documents over regular documents
+          if (doc.DOCUMENT_TYPE === 'forwarded' && existing.DOCUMENT_TYPE !== 'forwarded') {
+            fingerprintMap.set(doc.FINGERPRINT_HASH, doc);
+          } else if (doc.DOCUMENT_TYPE === existing.DOCUMENT_TYPE && doc.DOCUMENT_ID > existing.DOCUMENT_ID) {
+            fingerprintMap.set(doc.FINGERPRINT_HASH, doc);
+          }
+        }
+      });
+      
+      documents = Array.from(fingerprintMap.values());
+      
+      // Debug: Log final documents after deduplication
+      console.log('Final documents after deduplication:', documents.length);
+      const finalForwarded = documents.filter(doc => doc.DOCUMENT_TYPE === 'forwarded');
+      console.log('Final forwarded documents:', finalForwarded.length);
+      console.log('Final forwarded documents data:', JSON.stringify(finalForwarded, null, 2));
+    }
 
     res.json({
       success: true,
@@ -663,6 +1034,7 @@ exports.getDocumentsBySection = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
 
 // Download document
 exports.downloadDocument = async (req, res) => {

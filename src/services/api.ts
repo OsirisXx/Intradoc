@@ -219,6 +219,34 @@ class ApiService {
     }
   }
 
+  async uploadDocumentWithFile(data: {
+    file: File;
+    title: string;
+    description: string;
+    category?: string;
+    tags?: string;
+    uploadedBy: number;
+    sectionId: number;
+    fulfillsTaskId?: number;
+  }): Promise<ApiResponse<Document>> {
+    try {
+      const formData = new FormData();
+      formData.append('file', data.file);
+      formData.append('title', data.title);
+      formData.append('description', data.description || '');
+      formData.append('category', data.category || '');
+      formData.append('tags', data.tags || '');
+      formData.append('uploadedBy', data.uploadedBy.toString());
+      formData.append('sectionId', data.sectionId.toString());
+      if (data.fulfillsTaskId) formData.append('fulfillsTaskId', data.fulfillsTaskId.toString());
+      const response = await apiClient.postFormData('/documents/upload', formData);
+      return response;
+    } catch (error) {
+      console.error('Error uploading document with file:', error);
+      return { success: false, error: 'Failed to upload document file' };
+    }
+  }
+
   async getCategories(): Promise<ApiResponse<DocumentCategory[]>> {
     return new Promise((resolve) => {
       setTimeout(() => {
@@ -290,6 +318,16 @@ class ApiService {
     }
   }
 
+  async getAllTasksForOversight(): Promise<ApiResponse<TaskWithDetails[]>> {
+    try {
+      const response = await apiClient.get('/tasks/all-tasks');
+      return response;
+    } catch (error) {
+      console.error('Error fetching all tasks for oversight:', error);
+      return { success: false, error: 'Failed to fetch all tasks' };
+    }
+  }
+
   async getTaskById(taskId: number): Promise<ApiResponse<TaskWithDetails>> {
     return new Promise((resolve) => {
       setTimeout(() => {
@@ -310,12 +348,67 @@ class ApiService {
   }
 
   async completeTask(taskId: number): Promise<ApiResponse<void>> {
+    try { return await apiClient.put(`/tasks/${taskId}/complete`, {}); } catch (error) { console.error('Error completing task:', error); return { success: false, error: 'Failed to complete task' }; }
+  }
+
+  async submitTask(taskId: number): Promise<ApiResponse<void>> {
+    try { return await apiClient.put(`/tasks/${taskId}/submit`, {}); } catch (error) { console.error('Error submitting task:', error); return { success: false, error: 'Failed to submit task' }; }
+  }
+
+  async unsubmitTask(taskId: number): Promise<ApiResponse<void>> {
+    try { return await apiClient.put(`/tasks/${taskId}/unsubmit`, {}); } catch (error) { console.error('Error unsubmitting task:', error); return { success: false, error: 'Failed to unsubmit task' }; }
+  }
+
+  // Task document approval workflow methods
+  async approveTaskDocuments(taskId: number, forwardToDivision: boolean = false, remarks?: string): Promise<ApiResponse<void>> {
     try {
-      const response = await apiClient.put(`/tasks/${taskId}/status`, { status: 'completed' });
+      const response = await apiClient.post(`/tasks/${taskId}/approve`, {
+        forwardToDivision,
+        remarks: remarks || ''
+      });
       return response;
     } catch (error) {
-      console.error('Error completing task:', error);
-      return { success: false, error: 'Failed to complete task' };
+      console.error('Error approving task documents:', error);
+      return { success: false, error: 'Failed to approve task documents' };
+    }
+  }
+
+  async rejectTaskDocuments(taskId: number, remarks: string): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.post(`/tasks/${taskId}/reject`, {
+        remarks
+      });
+      return response;
+    } catch (error) {
+      console.error('Error rejecting task documents:', error);
+      return { success: false, error: 'Failed to reject task documents' };
+    }
+  }
+
+  async forwardTaskToDivisionManager(taskId: number, remarks?: string, targetDivisionManagerId?: number, targetTaskId?: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.post(`/tasks/${taskId}/forward-division`, {
+        remarks: remarks || '',
+        targetDivisionManagerId,
+        targetTaskId
+      });
+      return response;
+    } catch (error) {
+      console.error('Error forwarding task to division manager:', error);
+      return { success: false, error: 'Failed to forward task to division manager' };
+    }
+  }
+
+
+  async forwardTaskToRegional(taskId: number, remarks?: string): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.post(`/tasks/${taskId}/forward-regional`, {
+        remarks: remarks || ''
+      });
+      return response;
+    } catch (error) {
+      console.error('Error forwarding task to regional director:', error);
+      return { success: false, error: 'Failed to forward task to regional director' };
     }
   }
 
@@ -400,6 +493,68 @@ class ApiService {
     }
   }
 
+  async getTaskApprovalHistory(taskId: number, userId: number): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await apiClient.get(`/tasks/${taskId}/approval-history/${userId}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching task approval history:', error);
+      return { success: false, error: 'Failed to fetch approval history' };
+    }
+  }
+
+  async getDivisionManagers(divisionId: number): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await apiClient.get(`/users/division-managers/${divisionId}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching division managers:', error);
+      return { success: false, error: 'Failed to fetch division managers' };
+    }
+  }
+
+  async getDivisionManagerTasks(divisionManagerId: number): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await apiClient.get(`/tasks/assigned-by/${divisionManagerId}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching division manager tasks:', error);
+      return { success: false, error: 'Failed to fetch division manager tasks' };
+    }
+  }
+
+  async getDocumentProgress(userId: number): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await apiClient.get(`/documents/progress/${userId}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching document progress:', error);
+      return { success: false, error: 'Failed to fetch document progress' };
+    }
+  }
+
+  async sendBackToSectionHead(taskId: number, remarks: string): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.post(`/tasks/${taskId}/send-back-section-head`, {
+        remarks
+      });
+      return response;
+    } catch (error) {
+      console.error('Error sending back to section head:', error);
+      return { success: false, error: 'Failed to send back to section head' };
+    }
+  }
+
+  async deleteDocument(documentId: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.delete(`/documents/${documentId}`);
+      return response;
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      return { success: false, error: 'Failed to delete document' };
+    }
+  }
+
   async uploadDocumentWithUrl(data: {
     title: string;
     description: string;
@@ -464,16 +619,13 @@ class ApiService {
   }
 
   async markAllNotificationsAsRead(userId: number): Promise<ApiResponse<void>> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        this.notifications.forEach(notification => {
-          if (notification.USER_ID === userId) {
-            notification.READ = true;
-          }
-        });
-        resolve({ success: true });
-      }, 300);
-    });
+    try {
+      const response = await apiClient.put(`/notifications/mark-all-read/${userId}`);
+      return response;
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+      return { success: false, error: 'Failed to mark all notifications as read' };
+    }
   }
 
   async createNotification(notificationData: NotificationForm): Promise<ApiResponse<TaskNotification>> {
@@ -639,27 +791,33 @@ class ApiService {
 
   // Send to Regional Director methods
   async forwardToRegionalDirector(documentId: number, remarks: string): Promise<ApiResponse<void>> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const document = this.documents.find(d => d.DOCUMENT_ID === documentId);
-        if (document) {
-          // Update document with forwarding info
-          (document as any).FORWARDED_TO_REGIONAL = true;
-          (document as any).FORWARDED_BY = 1; // Current user
-          (document as any).FORWARDED_AT = new Date().toISOString();
-        }
-        resolve({ success: true });
-      }, 300);
-    });
+    try {
+      const response = await apiClient.post(`/documents/${documentId}/forward-regional`, { remarks });
+      return response;
+    } catch (error) {
+      console.error('Error forwarding to regional director:', error);
+      return { success: false, error: 'Failed to forward document to regional director' };
+    }
   }
 
   async getForwardedDocuments(): Promise<ApiResponse<DocumentWithDetails[]>> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const forwardedDocs = this.documents.filter(d => (d as any).FORWARDED_TO_REGIONAL);
-        resolve({ success: true, data: forwardedDocs });
-      }, 300);
-    });
+    try {
+      const response = await apiClient.get('/documents/forwarded');
+      return response;
+    } catch (error) {
+      console.error('Error fetching forwarded documents:', error);
+      return { success: false, error: 'Failed to fetch forwarded documents' };
+    }
+  }
+
+  async approveForwardedDocument(documentId: number, remarks?: string): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.post(`/documents/${documentId}/approve-forwarded`, { remarks });
+      return response;
+    } catch (error) {
+      console.error('Error approving forwarded document:', error);
+      return { success: false, error: 'Failed to approve forwarded document' };
+    }
   }
 
   // Helper methods
@@ -802,7 +960,7 @@ class ApiService {
       case 'division_manager':
         return '/division-manager/review';
       case 'regional_director':
-        return '/regional-director/review';
+        return '/regional-director';
       default:
         return '/';
     }
@@ -1098,6 +1256,53 @@ class ApiService {
     } catch (error) {
       console.error('Error viewing document:', error);
       return { success: false, error: 'Failed to view document' };
+    }
+  }
+
+  // User profile management methods
+  async getCurrentUserProfile(): Promise<ApiResponse<User>> {
+    try {
+      const response = await apiClient.get('/users/profile');
+      return response;
+    } catch (error) {
+      console.error('Error fetching current user profile:', error);
+      return { success: false, error: 'Failed to fetch user profile' };
+    }
+  }
+
+  async updateUserProfile(data: { name: string; email: string }): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.put('/users/profile', data);
+      return response;
+    } catch (error) {
+      console.error('Error updating user profile:', error);
+      return { success: false, error: 'Failed to update profile' };
+    }
+  }
+
+  async updateUserPassword(currentPassword: string, newPassword: string): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.put('/users/password', {
+        currentPassword,
+        newPassword
+      });
+      return response;
+    } catch (error) {
+      console.error('Error updating password:', error);
+      return { success: false, error: 'Failed to update password' };
+    }
+  }
+
+  async uploadProfileImage(file: File): Promise<ApiResponse<{ imagePath: string }>> {
+    try {
+      const formData = new FormData();
+      formData.append('profileImage', file);
+      
+      const response = await apiClient.postFormData('/users/profile-image', formData);
+      return response;
+    } catch (error) {
+      console.error('Error uploading profile image:', error);
+      return { success: false, error: 'Failed to upload profile image' };
     }
   }
 }

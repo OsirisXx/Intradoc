@@ -20,6 +20,9 @@ export function RegionalDirectorReview() {
   const [selectedDocument, setSelectedDocument] = useState<Types.DocumentWithDetails | null>(null)
   const [actionType, setActionType] = useState<'approve' | 'request_revision'>('approve')
   const [remarks, setRemarks] = useState('')
+  
+  // Review modal states for forwarded documents
+  const [showReviewModal, setShowReviewModal] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -94,6 +97,55 @@ export function RegionalDirectorReview() {
     }
   }
 
+  const handleForwardedAction = async () => {
+    if (!selectedDocument) return
+
+    try {
+      setProcessing(selectedDocument.DOCUMENT_ID)
+      let response: Types.ApiResponse<void>
+
+      if (actionType === 'approve') {
+        response = await apiService.approveForwardedDocument(selectedDocument.DOCUMENT_ID, remarks || 'Approved by Regional Director')
+      } else {
+        response = await apiService.requestRevision(selectedDocument.DOCUMENT_ID, remarks)
+      }
+
+      if (response.success) {
+        if (actionType === 'approve') {
+          // Update the document status in the forwarded documents list
+          setForwardedDocuments(prev => 
+            prev.map(doc => 
+              doc.DOCUMENT_ID === selectedDocument.DOCUMENT_ID 
+                ? { 
+                    ...doc, 
+                    currentStatus: { 
+                      ...doc.currentStatus,
+                      STATUS_ID: doc.currentStatus?.STATUS_ID || 0,
+                      DOCUMENT_ID: doc.DOCUMENT_ID,
+                      STATUS: 'Approved_Forwarded',
+                      CREATED_AT: doc.currentStatus?.CREATED_AT || new Date().toISOString()
+                    } 
+                  }
+                : doc
+            )
+          )
+        }
+        
+        setShowActionModal(false)
+        setSelectedDocument(null)
+        setRemarks('')
+        alert(`Forwarded document ${actionType === 'approve' ? 'approved and archived' : 'sent for revision'} successfully!`)
+      } else {
+        alert('Error processing action: ' + response.error)
+      }
+    } catch (error) {
+      console.error('Error processing forwarded action:', error)
+      alert('Error processing action')
+    } finally {
+      setProcessing(null)
+    }
+  }
+
   const openActionModal = (document: Types.DocumentWithDetails, action: 'approve' | 'request_revision') => {
     setSelectedDocument(document)
     setActionType(action)
@@ -101,10 +153,17 @@ export function RegionalDirectorReview() {
     setRemarks('')
   }
 
+  const openReviewModal = (document: Types.DocumentWithDetails) => {
+    setSelectedDocument(document)
+    setShowReviewModal(true)
+    setRemarks('')
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'Under_Regional_Review': return <Badge color="blue">Regional Review</Badge>
       case 'Approved': return <Badge color="green">Approved</Badge>
+      case 'Approved_Forwarded': return <Badge color="green">Approved (Forwarded)</Badge>
       case 'Archived': return <Badge color="blue">Archived</Badge>
       case 'Revision_Required': return <Badge color="red">Revision Required</Badge>
       default: return <Badge color="blue">{status}</Badge>
@@ -270,49 +329,56 @@ export function RegionalDirectorReview() {
               </div>
             ) : (
               <Table
-                columns={["Document", "Division", "Forwarded By", "Forward Date", "Status", "Actions"]}
-                rows={forwardedDocuments.map(document => [
-                  <div>
-                    <div style={{ fontWeight: 600 }}>{document.TITLE}</div>
-                    <div style={{ fontSize: 12, color: '#64748b' }}>
-                      {document.DESCRIPTION}
+                columns={["Document", "Division", "Forwarded By", "Forward Date", "Approval Date", "Status", "Actions"]}
+                rows={forwardedDocuments.map(document => {
+                  const isApproved = document.currentStatus?.STATUS === 'Approved_Forwarded'
+                  const approvalDate = (document as any).APPROVAL_DATE
+                  
+                  return [
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{document.TITLE}</div>
+                      <div style={{ fontSize: 12, color: '#64748b' }}>
+                        {document.DESCRIPTION}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
+                        SHA: {document.FINGERPRINT_HASH.substring(0, 16)}...
+                      </div>
+                    </div>,
+                    <div>
+                      <div style={{ fontWeight: 500 }}>{document.section?.NAME}</div>
+                      <div style={{ fontSize: 12, color: '#64748b' }}>
+                        Created by: {document.createdByUser?.NAME}
+                      </div>
+                    </div>,
+                    <div>
+                      <div style={{ fontWeight: 500 }}>{(document as any).FORWARDED_BY_NAME || 'Unknown'}</div>
+                      <div style={{ fontSize: 12, color: '#64748b' }}>
+                        {(document as any).FORWARDED_BY_ROLE?.replace('_', ' ') || 'Division Manager'}
+                      </div>
+                    </div>,
+                    <div style={{ fontSize: 12 }}>
+                      {document.FORWARDED_AT ? new Date(document.FORWARDED_AT).toLocaleDateString() : 'N/A'}
+                    </div>,
+                    <div style={{ fontSize: 12 }}>
+                      {approvalDate ? new Date(approvalDate).toLocaleDateString() : '-'}
+                    </div>,
+                    getStatusBadge(document.currentStatus?.STATUS || 'Under_Regional_Review'),
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {!isApproved ? (
+                        <button 
+                          className="btn btn-sm btn-primary"
+                          onClick={() => openReviewModal(document)}
+                        >
+                          Review
+                        </button>
+                      ) : (
+                        <span style={{ color: '#10b981', fontSize: 12, fontWeight: 500 }}>
+                          ✓ Approved
+                        </span>
+                      )}
                     </div>
-                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
-                      SHA: {document.FINGERPRINT_HASH.substring(0, 16)}...
-                    </div>
-                  </div>,
-                  <div>
-                    <div style={{ fontWeight: 500 }}>{document.section?.NAME}</div>
-                    <div style={{ fontSize: 12, color: '#64748b' }}>
-                      Created by: {document.createdByUser?.NAME}
-                    </div>
-                  </div>,
-                  <div>
-                    <div style={{ fontWeight: 500 }}>{document.assignedUser?.NAME}</div>
-                    <div style={{ fontSize: 12, color: '#64748b' }}>
-                      {document.assignedUser?.FUNCTIONAL_ROLE.replace('_', ' ')}
-                    </div>
-                  </div>,
-                  <div style={{ fontSize: 12 }}>
-                    {document.FORWARDED_AT ? new Date(document.FORWARDED_AT).toLocaleDateString() : 'N/A'}
-                  </div>,
-                  getStatusBadge(document.currentStatus?.STATUS || 'Under_Regional_Review'),
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button 
-                      className="btn btn-sm btn-primary"
-                      onClick={() => {
-                        // Move to review tab and select this document
-                        setActiveTab('review')
-                        // You could add logic here to highlight the specific document
-                      }}
-                    >
-                      Review
-                    </button>
-                    <button className="btn btn-sm btn-outline-secondary">
-                      View Details
-                    </button>
-                  </div>
-                ])}
+                  ]
+                })}
               />
             )}
           </Card>
@@ -458,12 +524,104 @@ export function RegionalDirectorReview() {
                 className={`btn ${
                   actionType === 'approve' ? 'btn-success' : 'btn-warning'
                 }`}
-                onClick={handleAction}
+                onClick={activeTab === 'forwarded' ? handleForwardedAction : handleAction}
                 disabled={processing !== null || (actionType === 'request_revision' && !remarks.trim())}
               >
                 {processing !== null ? 'Processing...' : 
                   actionType === 'approve' ? 'Approve & Archive' : 'Request Revision'
                 }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Review Modal for Forwarded Documents */}
+      {showReviewModal && selectedDocument && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: 24,
+            borderRadius: 8,
+            width: '90%',
+            maxWidth: 600,
+            maxHeight: '90vh',
+            overflow: 'auto'
+          }}>
+            <h3 style={{ marginBottom: 16 }}>
+              Review Forwarded Document
+            </h3>
+            
+            <div style={{ marginBottom: 16 }}>
+              <strong>Document:</strong> {selectedDocument.TITLE}
+            </div>
+            
+            <div style={{ marginBottom: 16 }}>
+              <strong>Description:</strong> {selectedDocument.DESCRIPTION}
+            </div>
+            
+            <div style={{ marginBottom: 16, padding: 12, background: '#f8fafc', borderRadius: 4 }}>
+              <div style={{ fontSize: 12, color: '#64748b' }}>
+                <strong>Forwarded by:</strong> {(selectedDocument as any).FORWARDED_BY_NAME || 'Unknown'}<br/>
+                <strong>Forwarded on:</strong> {selectedDocument.FORWARDED_AT ? new Date(selectedDocument.FORWARDED_AT).toLocaleDateString() : 'N/A'}<br/>
+                <strong>Created by:</strong> {selectedDocument.createdByUser?.NAME}<br/>
+                <strong>Section:</strong> {selectedDocument.section?.NAME}
+              </div>
+            </div>
+            
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', marginBottom: 8 }}>
+                Review Remarks (Optional)
+              </label>
+              <textarea
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                rows={3}
+                style={{ width: '100%', padding: 8, border: '1px solid #d1d5db', borderRadius: 4 }}
+                placeholder="Add any review comments or feedback..."
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button 
+                className="btn btn-secondary"
+                onClick={() => setShowReviewModal(false)}
+                disabled={processing !== null}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-warning"
+                onClick={() => {
+                  setActionType('request_revision')
+                  setShowReviewModal(false)
+                  setShowActionModal(true)
+                }}
+                disabled={processing !== null}
+              >
+                Request Revision
+              </button>
+              <button 
+                className="btn btn-success"
+                onClick={() => {
+                  setActionType('approve')
+                  setShowReviewModal(false)
+                  setShowActionModal(true)
+                }}
+                disabled={processing !== null}
+              >
+                Approve & Archive
               </button>
             </div>
           </div>

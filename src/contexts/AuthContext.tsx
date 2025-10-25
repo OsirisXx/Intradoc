@@ -10,6 +10,7 @@ interface AuthContextType {
   login: (user: AuthUser) => void;
   logout: () => void;
   checkAuth: () => Promise<boolean>;
+  updateUser: (userData: AuthUser) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -65,10 +66,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     checkExistingSession();
   }, []);
 
-  const login = (userData: AuthUser) => {
+  const login = async (userData: AuthUser) => {
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
     localStorage.setItem('loginTime', Date.now().toString());
+    
+    // Fetch complete user profile including PROFILE_IMAGE
+    try {
+      const { apiService } = await import('../services/api');
+      const profileResponse = await apiService.getCurrentUserProfile();
+      if (profileResponse.success && profileResponse.data) {
+        // Merge the profile data with the auth user data
+        const completeUser = {
+          ...userData,
+          PROFILE_IMAGE: profileResponse.data.PROFILE_IMAGE
+        };
+        setUser(completeUser);
+        localStorage.setItem('user', JSON.stringify(completeUser));
+      }
+    } catch (profileError) {
+      console.error('Error fetching user profile after login:', profileError);
+    }
+  };
+
+  const updateUser = (userData: AuthUser) => {
+    setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));
   };
 
   const logout = () => {
@@ -97,10 +120,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       }
 
-      // Now verify with backend API
+      // Now verify with backend API and fetch complete user profile
       const result = await checkAuthAPI();
       if (result.success && result.user) {
-        setUser(result.user);
+        // Fetch complete user profile including PROFILE_IMAGE
+        try {
+          const { apiService } = await import('../services/api');
+          const profileResponse = await apiService.getCurrentUserProfile();
+          if (profileResponse.success && profileResponse.data) {
+            // Merge the profile data with the auth user data
+            const completeUser = {
+              ...result.user,
+              PROFILE_IMAGE: profileResponse.data.PROFILE_IMAGE
+            };
+            setUser(completeUser);
+            localStorage.setItem('user', JSON.stringify(completeUser));
+          } else {
+            setUser(result.user);
+          }
+        } catch (profileError) {
+          console.error('Error fetching user profile:', profileError);
+          setUser(result.user);
+        }
         return true;
       } else {
         setUser(null);
@@ -126,6 +167,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     login,
     logout,
     checkAuth,
+    updateUser,
   };
 
   return (

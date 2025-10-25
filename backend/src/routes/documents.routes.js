@@ -10,6 +10,8 @@ router.use(authenticate);
 router.get('/', documentsController.getDocuments);
 router.get('/section/:sectionId', documentsController.getDocumentsBySection);
 router.post('/upload', documentsController.uploadDocument);
+// Allow deletion with guard rules in controller
+router.delete('/:documentId', documentsController.deleteDocument);
 
 // Document approval workflow
 router.get('/pending-review', documentsController.getPendingReview);
@@ -18,6 +20,11 @@ router.post('/:documentId/reject', documentsController.rejectDocument);
 router.post('/:documentId/request-revision', documentsController.requestRevision);
 router.post('/:documentId/forward-regional', documentsController.forwardToRegional);
 router.get('/:documentId/approval-history', documentsController.getApprovalHistory);
+router.get('/progress/:userId', documentsController.getDocumentProgress);
+
+// Forwarded documents for Regional Directors
+router.get('/forwarded', documentsController.getForwardedDocuments);
+router.post('/:documentId/approve-forwarded', documentsController.approveForwardedDocument);
 
 // Document download
 router.get('/download/:documentId', documentsController.downloadDocument);

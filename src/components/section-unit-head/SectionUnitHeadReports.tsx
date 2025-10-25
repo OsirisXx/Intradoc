@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import { useSearchParams } from 'react-router-dom'
 import { apiService } from '../../services/api'
 import * as Types from '../../types'
 import './SectionUnitHead.css'
 
 export function SectionUnitHeadReports() {
   const { user } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [documents, setDocuments] = useState<Types.DocumentWithDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -24,7 +26,7 @@ export function SectionUnitHeadReports() {
   const [showReviewModal, setShowReviewModal] = useState(false)
   const [reviewDoc, setReviewDoc] = useState<Types.DocumentWithDetails | null>(null)
   const [feedbackForm, setFeedbackForm] = useState({
-    type: '' as string,
+    type: 'constructive' as 'positive' | 'constructive' | 'action_required' | 'question',
     content: '',
   })
 
@@ -37,12 +39,29 @@ export function SectionUnitHeadReports() {
       setError(null)
       const response = await apiService.getDocumentsBySection(user.SECTION_ID)
       if (response.success) {
-        // Filter to show documents submitted by staff (not section heads)
-        const staffDocuments = (response.data || []).filter(doc => {
-          const submitter = doc.CREATED_BY_ROLE
-          return submitter && submitter === 'staff'
-        })
-        setDocuments(staffDocuments)
+        // Role-based filtering
+        // - Division Managers: see all section documents (staff + forwarded)
+        // - Section Unit Heads: only staff-submitted
+        // - Regional Directors: ONLY documents forwarded to regional by division managers
+        let filteredDocuments = response.data || [];
+
+        if (user.FUNCTIONAL_ROLE === 'division_manager') {
+          filteredDocuments = response.data || [];
+        } else if (user.FUNCTIONAL_ROLE === 'regional_director') {
+          filteredDocuments = (response.data || []).filter(doc => {
+            const status = (doc as any).CURRENT_STATUS || (doc as any).STATUS
+            const forwardedToRegional = (doc as any).FORWARDED_TO_REGIONAL === 1
+            const forwardedByRole = (doc as any).FORWARDED_BY_ROLE === 'division_manager'
+            return forwardedToRegional || status === 'Under_Regional_Review' || forwardedByRole
+          })
+        } else {
+          filteredDocuments = (response.data || []).filter(doc => {
+            const submitter = (doc as any).CREATED_BY_ROLE
+            return submitter && submitter === 'staff'
+          })
+        }
+        
+        setDocuments(filteredDocuments)
       } else {
         setError(response.error || 'Failed to load documents')
         setDocuments([])
@@ -98,19 +117,20 @@ export function SectionUnitHeadReports() {
     }
   }, [user])
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Submitted': return 'status-pending'
-      case 'Under_Section_Review': return 'status-pending'
-      case 'Under_Division_Review': return 'status-reviewed'
-      case 'Under_Regional_Review': return 'status-reviewed'
-      case 'Approved': return 'status-approved'
-      case 'Archived': return 'status-approved'
-      case 'Rejected': return 'status-rejected'
-      case 'Revision_Required': return 'status-revision'
-      default: return 'status-pending'
+  // Auto-open modal when documentId is in URL
+  useEffect(() => {
+    const documentId = searchParams.get('documentId')
+    if (documentId && documents.length > 0) {
+      const targetDocument = documents.find(doc => doc.DOCUMENT_ID.toString() === documentId)
+      if (targetDocument) {
+        setReviewDoc(targetDocument)
+        setShowReviewModal(true)
+        // Clear the URL parameter after opening modal
+        setSearchParams({})
+      }
     }
-  }
+  }, [documents, searchParams, setSearchParams])
+
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -151,12 +171,12 @@ export function SectionUnitHeadReports() {
   // Enhanced filtering and sorting
   const filteredAndSortedDocuments = documents
     .filter(doc => {
-      const matchesStatus = filter === 'all' || doc.STATUS === filter
-      const matchesCategory = categoryFilter === 'all' || doc.category?.CATEGORY_NAME === categoryFilter
+      const matchesStatus = filter === 'all' || ((doc as any).CURRENT_STATUS || (doc as any).STATUS) === filter
+      const matchesCategory = categoryFilter === 'all' || (doc.category as any)?.CATEGORY_NAME === categoryFilter
       const matchesSearch = searchTerm === '' || 
         doc.TITLE.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        doc.DESCRIPTION.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        doc.createdByUser?.NAME.toLowerCase().includes(searchTerm.toLowerCase())
+        (doc.DESCRIPTION || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        ((doc as any).CREATED_BY_NAME || doc.createdByUser?.NAME || '').toLowerCase().includes(searchTerm.toLowerCase())
       
       return matchesStatus && matchesCategory && matchesSearch
     })
@@ -169,8 +189,8 @@ export function SectionUnitHeadReports() {
           bValue = b.TITLE.toLowerCase()
           break
         case 'status':
-          aValue = a.STATUS
-          bValue = b.STATUS
+          aValue = (a as any).CURRENT_STATUS || (a as any).STATUS
+          bValue = (b as any).CURRENT_STATUS || (b as any).STATUS
           break
         case 'date':
         default:
@@ -187,15 +207,16 @@ export function SectionUnitHeadReports() {
     })
 
   // Get unique categories for filter
-  const categories = Array.from(new Set(documents.map(doc => doc.category?.CATEGORY_NAME).filter(Boolean)))
+  const categories = Array.from(new Set(documents.map(doc => (doc.category as any)?.CATEGORY_NAME).filter(Boolean)))
 
   // Document summary
   const documentSummary = {
     total: documents.length,
-    pending: documents.filter(d => ['Submitted', 'Under_Section_Review'].includes(d.STATUS)).length,
-    approved: documents.filter(d => ['Approved', 'Archived'].includes(d.STATUS)).length,
-    rejected: documents.filter(d => d.STATUS === 'Rejected').length,
-    revisionRequired: documents.filter(d => d.STATUS === 'Revision_Required').length,
+    pending: documents.filter(d => ['Submitted', 'Under_Section_Review'].includes((d as any).CURRENT_STATUS || (d as any).STATUS)).length,
+    approved: documents.filter(d => ['Approved', 'Archived'].includes((d as any).CURRENT_STATUS || (d as any).STATUS)).length,
+    rejected: documents.filter(d => ((d as any).CURRENT_STATUS || (d as any).STATUS) === 'Rejected').length,
+    revisionRequired: documents.filter(d => ((d as any).CURRENT_STATUS || (d as any).STATUS) === 'Revision_Required').length,
+    forwarded: documents.filter(d => (d as any).DOCUMENT_TYPE === 'forwarded').length,
   }
 
   const getTypeIcon = (categoryName?: string) => {
@@ -244,16 +265,16 @@ export function SectionUnitHeadReports() {
             </div>
             <div className="header-stats">
               <div className="stat-item">
-                <span className="stat-number">{documentSummary.total}</span>
-                <span className="stat-label">Total</span>
+                <span className="stat-number" style={{ color: '#fff' }}>{documentSummary.total}</span>
+                <span className="stat-label" style={{ color: '#fff' }}>Total</span>
               </div>
               <div className="stat-item">
-                <span className="stat-number">{documentSummary.pending}</span>
-                <span className="stat-label">Pending</span>
+                <span className="stat-number" style={{ color: '#fff' }}>{documentSummary.pending}</span>
+                <span className="stat-label" style={{ color: '#fff' }}>Pending</span>
               </div>
               <div className="stat-item">
-                <span className="stat-number">{documentSummary.approved}</span>
-                <span className="stat-label">Approved</span>
+                <span className="stat-number" style={{ color: '#fff' }}>{documentSummary.approved}</span>
+                <span className="stat-label" style={{ color: '#fff' }}>Approved</span>
               </div>
             </div>
           </div>
@@ -299,6 +320,21 @@ export function SectionUnitHeadReports() {
               </div>
             </div>
           </div>
+          
+          {documentSummary.forwarded > 0 && (
+            <div className="summary-card forwarded">
+              <div className="card-icon-wrapper">
+                <div className="card-icon">📤</div>
+              </div>
+              <div className="card-content">
+                <div className="card-number">{documentSummary.forwarded}</div>
+                <div className="card-label">Forwarded Documents</div>
+                <div className="card-subtitle">
+                  Documents forwarded to you for review
+                </div>
+              </div>
+            </div>
+          )}
           
           <div className="summary-card revision">
             <div className="card-icon-wrapper">
@@ -477,13 +513,32 @@ export function SectionUnitHeadReports() {
       ) : viewMode === 'card' ? (
         <div className="documents-grid">
           {filteredAndSortedDocuments.map(doc => (
-            <div key={doc.DOCUMENT_ID} className="document-card">
+            <div key={doc.DOCUMENT_ID} className={`document-card ${(doc as any).DOCUMENT_TYPE === 'forwarded' ? 'forwarded-document' : ''}`}>
+              {(doc as any).DOCUMENT_TYPE === 'forwarded' && (
+                <div className="forwarded-badge">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                    <polyline points="16,6 12,2 8,6"/>
+                    <line x1="12" y1="2" x2="12" y2="15"/>
+                  </svg>
+                  Forwarded Document
+                </div>
+              )}
+              {(doc as any).DOCUMENT_TYPE === 'forwarded' && (doc as any).FORWARDED_BY_NAME && (
+                <div className="forwarded-by-info">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                  </svg>
+                  {(doc as any).FORWARDED_BY_NAME} forwarded this document to you
+                </div>
+              )}
               <div className="document-header">
                 <div className="document-icon">
-                  {getTypeIcon(doc.category?.CATEGORY_NAME)}
+                  {getTypeIcon((doc.category as any)?.CATEGORY_NAME)}
                 </div>
                 <div className="document-badges">
-                  {getStatusBadge(doc.STATUS)}
+                  {getStatusBadge((doc as any).CURRENT_STATUS || (doc as any).STATUS)}
                 </div>
               </div>
 
@@ -497,7 +552,7 @@ export function SectionUnitHeadReports() {
                       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
                       <circle cx="12" cy="7" r="4"/>
                     </svg>
-                    <span>{doc.createdByUser?.NAME || 'Unknown'}</span>
+                    <span>{(doc as any).CREATED_BY_NAME || doc.createdByUser?.NAME || 'Unknown'}</span>
                   </div>
                   <div className="meta-item">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -513,16 +568,16 @@ export function SectionUnitHeadReports() {
                         <path d="M5 21V7l8-4v18"/>
                         <path d="M19 21V11l-6-4"/>
                       </svg>
-                      <span>{doc.category.CATEGORY_NAME}</span>
+                      <span>{(doc.category as any).CATEGORY_NAME}</span>
                     </div>
                   )}
-                  {doc.FILE_SIZE && (
+                  {(doc as any).FILE_SIZE && (
                     <div className="meta-item">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14,2 14,8 20,8"/>
                       </svg>
-                      <span>{formatFileSize(doc.FILE_SIZE)}</span>
+                      <span>{formatFileSize((doc as any).FILE_SIZE)}</span>
                     </div>
                   )}
                 </div>
@@ -544,13 +599,13 @@ export function SectionUnitHeadReports() {
                   Give Feedback
                 </button>
                 
-                {doc.FILE_PATH && (
+                {(doc as any).FILE_PATH && (
                   <button 
                     className="btn btn-secondary btn-sm"
                     onClick={() => {
                       const link = document.createElement('a')
-                      link.href = doc.FILE_PATH
-                      link.download = doc.FILE_NAME || doc.TITLE
+                      link.href = (doc as any).FILE_PATH
+                      link.download = (doc as any).FILE_NAME || doc.TITLE
                       link.click()
                     }}
                   >
@@ -580,28 +635,47 @@ export function SectionUnitHeadReports() {
       ) : (
         <div className="documents-list">
           {filteredAndSortedDocuments.map(doc => (
-            <div key={doc.DOCUMENT_ID} className="document-list-item">
+            <div key={doc.DOCUMENT_ID} className={`document-list-item ${(doc as any).DOCUMENT_TYPE === 'forwarded' ? 'forwarded-document' : ''}`}>
+              {(doc as any).DOCUMENT_TYPE === 'forwarded' && (
+                <div className="forwarded-indicator">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                    <polyline points="16,6 12,2 8,6"/>
+                    <line x1="12" y1="2" x2="12" y2="15"/>
+                  </svg>
+                  Forwarded
+                </div>
+              )}
+              {(doc as any).DOCUMENT_TYPE === 'forwarded' && (doc as any).FORWARDED_BY_NAME && (
+                <div className="forwarded-by-text">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                  </svg>
+                  {(doc as any).FORWARDED_BY_NAME} forwarded this document to you
+                </div>
+              )}
               <div className="document-list-content">
                 <div className="document-list-main">
                   <div className="document-list-header">
                     <h4 className="document-list-title">{doc.TITLE}</h4>
-                    {getStatusBadge(doc.STATUS)}
+                    {getStatusBadge((doc as any).CURRENT_STATUS || (doc as any).STATUS)}
                   </div>
                   <p className="document-list-description">{doc.DESCRIPTION}</p>
                   <div className="document-list-meta">
-                    <span>{doc.createdByUser?.NAME || 'Unknown'}</span>
+                    <span>{(doc as any).CREATED_BY_NAME || doc.createdByUser?.NAME || 'Unknown'}</span>
                     <span>•</span>
                     <span>{formatDate(doc.CREATED_AT)}</span>
                     {doc.category && (
                       <>
                         <span>•</span>
-                        <span>{doc.category.CATEGORY_NAME}</span>
+                        <span>{(doc.category as any).CATEGORY_NAME}</span>
                       </>
                     )}
-                    {doc.FILE_SIZE && (
+                    {(doc as any).FILE_SIZE && (
                       <>
                         <span>•</span>
-                        <span>{formatFileSize(doc.FILE_SIZE)}</span>
+                        <span>{formatFileSize((doc as any).FILE_SIZE)}</span>
                       </>
                     )}
                   </div>
@@ -616,13 +690,13 @@ export function SectionUnitHeadReports() {
                   >
                     Feedback
                   </button>
-                  {doc.FILE_PATH && (
+                  {(doc as any).FILE_PATH && (
                     <button 
                       className="btn btn-secondary btn-xs"
                       onClick={() => {
                         const link = document.createElement('a')
-                        link.href = doc.FILE_PATH
-                        link.download = doc.FILE_NAME || doc.TITLE
+                        link.href = (doc as any).FILE_PATH
+                        link.download = (doc as any).FILE_NAME || doc.TITLE
                         link.click()
                       }}
                     >
@@ -645,50 +719,67 @@ export function SectionUnitHeadReports() {
       {/* Feedback Modal */}
       {showFeedbackModal && selectedDocument && (
         <div className="modal-overlay" onClick={() => setShowFeedbackModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header" style={{ background:'#ffffff', color:'#1e293b', borderBottom:'1px solid #e2e8f0' }}>
-              <h3>Write Feedback</h3>
+          <div className="modal-content large" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="modal-header">
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontSize:18 }}>💬</span>
+                <h3 style={{ margin:0 }}>Write Feedback</h3>
+              </div>
               <button className="btn-close" onClick={() => setShowFeedbackModal(false)}>×</button>
             </div>
             
             <div className="modal-body">
-              <div className="feedback-target">
-                <h4>Document: {selectedDocument.TITLE}</h4>
-                <p>Submitted by: {selectedDocument.createdByUser?.NAME}</p>
-                <p>Category: {selectedDocument.category?.CATEGORY_NAME}</p>
+              {/* Document summary */}
+              <div className="review-section" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:12 }}>
+                <div className="form-group" style={{ marginTop:0 }}>
+                  <label>Document</label>
+                  <div>{selectedDocument.TITLE}</div>
+                </div>
+                <div className="form-group" style={{ marginTop:0 }}>
+                  <label>Submitted by</label>
+                  <div>{selectedDocument.createdByUser?.NAME || (selectedDocument as any).CREATED_BY_NAME || 'Unknown'}</div>
+                </div>
+                {selectedDocument.category && (
+                  <div className="form-group" style={{ gridColumn:'1 / -1', marginTop:0 }}>
+                    <label>Category</label>
+                    <div>{(selectedDocument.category as any).CATEGORY_NAME}</div>
+                  </div>
+                )}
               </div>
               
               <form onSubmit={handleWriteFeedback}>
-                <div className="form-group">
-                  <label htmlFor="feedback-type">Feedback Type</label>
-                  <input
-                    id="feedback-type"
-                    list="feedback-types"
-                    value={feedbackForm.type}
-                    onChange={(e) => setFeedbackForm(prev => ({ ...prev, type: e.target.value }))}
-                    placeholder="Type or choose..."
-                  />
-                  <datalist id="feedback-types">
-                    <option value="positive">👍 Positive</option>
-                    <option value="constructive">💡 Constructive</option>
-                    <option value="action_required">⚠️ Action Required</option>
-                    <option value="question">❓ Question</option>
-                  </datalist>
-                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:16 }}>
+                  <div className="form-group">
+                    <label htmlFor="feedback-type">Feedback Type</label>
+                    <input
+                      id="feedback-type"
+                      list="feedback-types"
+                      value={feedbackForm.type}
+                      onChange={(e) => setFeedbackForm(prev => ({ ...prev, type: e.target.value as 'positive' | 'constructive' | 'action_required' | 'question' }))}
+                      placeholder="Type or choose..."
+                    />
+                    <datalist id="feedback-types">
+                      <option value="positive">👍 Positive</option>
+                      <option value="constructive">💡 Constructive</option>
+                      <option value="action_required">⚠️ Action Required</option>
+                      <option value="question">❓ Question</option>
+                    </datalist>
+                  </div>
 
-                <div className="form-group">
-                  <label htmlFor="feedback-content">Feedback Content *</label>
-                  <textarea
-                    id="feedback-content"
-                    value={feedbackForm.content}
-                    onChange={(e) => setFeedbackForm(prev => ({ 
-                      ...prev, 
-                      content: e.target.value 
-                    }))}
-                    rows={6}
-                    placeholder="Provide detailed feedback..."
-                    required
-                  />
+                  <div className="form-group" style={{ gridColumn:'2 / -1' }}>
+                    <label htmlFor="feedback-content">Feedback Content *</label>
+                    <textarea
+                      id="feedback-content"
+                      value={feedbackForm.content}
+                      onChange={(e) => setFeedbackForm(prev => ({ 
+                        ...prev, 
+                        content: e.target.value 
+                      }))}
+                      rows={6}
+                      placeholder="Provide detailed, actionable feedback..."
+                      required
+                    />
+                  </div>
                 </div>
                 
                 <div className="modal-footer">
@@ -711,69 +802,77 @@ export function SectionUnitHeadReports() {
 
       {showReviewModal && reviewDoc && (
         <div className="modal-overlay" onClick={() => setShowReviewModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-            <div className="modal-header" style={{ background:'#ffffff', color:'#1e293b', borderBottom:'1px solid #e2e8f0' }}>
-              <h3>Review Document</h3>
+          <div className="modal-content large" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="modal-header">
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontSize:18 }}>📝</span>
+                <h3 style={{ margin:0 }}>Review Document</h3>
+              </div>
               <button className="btn-close" onClick={() => setShowReviewModal(false)}>×</button>
             </div>
             <div className="modal-body">
-              {/* Title duplicate at top, as per reference */}
+              {/* Title */}
               <h4 style={{ marginTop:0 }}>{reviewDoc.TITLE}</h4>
-              {/* Primary section: Type and File with actions */}
-              {(() => {
-                const fileLink = (reviewDoc as any).FILE_LINK || (reviewDoc as any).DOCUMENT_URL || reviewDoc.FILE_PATH || ''
-                
-                // Extract just the filename from the file link
-                let fileName = ''
-                if (fileLink) {
-                  // Extract filename from file link - handle both absolute paths and URLs
-                  if (fileLink.startsWith('http://') || fileLink.startsWith('https://')) {
-                    // It's a URL
-                    try {
-                      const url = new URL(fileLink)
-                      const pathSegments = url.pathname.split('/').filter(Boolean)
-                      fileName = pathSegments.length > 0 ? decodeURIComponent(pathSegments[pathSegments.length - 1]) : ''
-                    } catch {
-                      fileName = decodeURIComponent((fileLink as string).split('/').pop() || '')
-                    }
-                  } else {
-                    // It's a file path (absolute or relative)
-                    fileName = fileLink.split(/[/\\]/).pop() || fileLink
-                    // Remove any URL encoding if present
-                    try {
-                      fileName = decodeURIComponent(fileName)
-                    } catch {
-                      // If decode fails, use the original
+              
+              {/* Meta grid */}
+              <div className="review-section" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+                <div className="form-group" style={{ marginTop:0 }}>
+                  <label>Submitted by</label>
+                  <div>{reviewDoc.createdByUser?.NAME || (reviewDoc as any).CREATED_BY_NAME || (reviewDoc as any).SUBMITTER_NAME || 'Unknown'}</div>
+                </div>
+                <div className="form-group" style={{ marginTop:0 }}>
+                  <label>Date</label>
+                  <div>{formatDate(reviewDoc.CREATED_AT)}</div>
+                </div>
+              </div>
+
+              {/* File details and actions */}
+              <div className="review-section">
+                <p style={{ margin:'4px 0' }}><strong>Type:</strong> 📎 File Upload</p>
+                <p style={{ margin:'4px 0' }}><strong>File:</strong> {(() => {
+                  const fileLink = (reviewDoc as any).FILE_LINK || (reviewDoc as any).DOCUMENT_URL || (reviewDoc as any).FILE_PATH || ''
+                  
+                  // Extract just the filename from the file link
+                  let fileName = ''
+                  if (fileLink) {
+                    // Extract filename from file link - handle both absolute paths and URLs
+                    if (fileLink.startsWith('http://') || fileLink.startsWith('https://')) {
+                      // It's a URL
+                      try {
+                        const url = new URL(fileLink)
+                        const pathSegments = url.pathname.split('/').filter(Boolean)
+                        fileName = pathSegments.length > 0 ? decodeURIComponent(pathSegments[pathSegments.length - 1]) : ''
+                      } catch {
+                        fileName = decodeURIComponent((fileLink as string).split('/').pop() || '')
+                      }
+                    } else {
+                      // It's a file path (absolute or relative)
+                      fileName = fileLink.split(/[/\\]/).pop() || fileLink
+                      // Remove any URL encoding if present
+                      try {
+                        fileName = decodeURIComponent(fileName)
+                      } catch {
+                        // If decode fails, use the original
+                      }
                     }
                   }
-                }
-                
-                return (
-                  <div className="feedback-target">
-                    <p style={{ margin:'4px 0' }}><strong>Type:</strong> 📎 File Upload</p>
-                    <p style={{ margin:'4px 0' }}><strong>File:</strong> {fileName || '—'}</p>
-                    {fileLink && (
-                      <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:8 }}>
-                        <a className="btn btn-secondary" href={fileLink as string} download>
-                          Download File
-                        </a>
-                        <a className="btn btn-outline" href={fileLink as string} target="_blank" rel="noopener noreferrer">
-                          Open in New Tab
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                )
-              })()}
+                  return fileName || '—'
+                })()}</p>
+                {(() => {
+                  const fileLink = (reviewDoc as any).FILE_LINK || (reviewDoc as any).DOCUMENT_URL || (reviewDoc as any).FILE_PATH || ''
+                  return fileLink && (
+                    <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:8 }}>
+                      <a className="btn btn-secondary" href={fileLink as string} download>
+                        Download File
+                      </a>
+                      <a className="btn btn-outline" href={fileLink as string} target="_blank" rel="noopener noreferrer">
+                        Open in New Tab
+                      </a>
+                    </div>
+                  )
+                })()}
+              </div>
 
-              <div className="form-group" style={{ marginTop:16 }}>
-                <label>Submitted by:</label>
-                <div>{reviewDoc.createdByUser?.NAME || (reviewDoc as any).CREATED_BY_NAME || (reviewDoc as any).SUBMITTER_NAME || 'Unknown'}</div>
-              </div>
-              <div className="form-group">
-                <label>Date:</label>
-                <div>{formatDate(reviewDoc.CREATED_AT)}</div>
-              </div>
               {reviewDoc.DESCRIPTION && (
                 <div className="form-group">
                   <label>Description</label>

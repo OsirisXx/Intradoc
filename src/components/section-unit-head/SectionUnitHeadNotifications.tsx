@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import * as Types from '../../types';
 import './SectionUnitHead.css';
 
-const SectionUnitHeadNotifications: React.FC = () => {
+interface SectionUnitHeadNotificationsProps {
+  roleBasePath?: string;
+}
+
+const SectionUnitHeadNotifications: React.FC<SectionUnitHeadNotificationsProps> = ({ roleBasePath = '/section-unit-head' }) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Types.TaskNotificationWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -16,12 +22,26 @@ const SectionUnitHeadNotifications: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [groupBy, setGroupBy] = useState<'none' | 'type' | 'date'>('none');
   const [viewMode, setViewMode] = useState<'detailed' | 'compact'>('detailed');
+  const [hasAutoMarked, setHasAutoMarked] = useState(false);
 
   useEffect(() => {
     if (user) {
       loadNotifications();
     }
   }, [user]);
+
+  // Auto-mark notifications as read when component mounts
+  useEffect(() => {
+    if (notifications.length > 0 && !hasAutoMarked) {
+      const unreadNotifications = notifications.filter(n => !n.IS_READ);
+      if (unreadNotifications.length > 0) {
+        console.log('Auto-marking notifications as read:', unreadNotifications.length) // Debug log
+        setHasAutoMarked(true);
+        // Mark all unread notifications as read automatically
+        markAllAsRead();
+      }
+    }
+  }, [notifications, hasAutoMarked]);
 
   const loadNotifications = async () => {
     try {
@@ -54,6 +74,10 @@ const SectionUnitHeadNotifications: React.FC = () => {
           ? { ...notification, IS_READ: true }
           : notification
       ));
+
+      // Dispatch custom event to notify sidebar of count change
+      console.log('Dispatching notificationsUpdated event (single)') // Debug log
+      window.dispatchEvent(new CustomEvent('notificationsUpdated'));
     } catch (err) {
       console.error('Error marking notification as read:', err);
     }
@@ -71,6 +95,10 @@ const SectionUnitHeadNotifications: React.FC = () => {
       setNotifications(prev => prev.map(notification => 
         ({ ...notification, IS_READ: true })
       ));
+
+      // Dispatch custom event to notify sidebar of count change
+      console.log('Dispatching notificationsUpdated event (all)') // Debug log
+      window.dispatchEvent(new CustomEvent('notificationsUpdated'));
     } catch (err) {
       console.error('Error marking all notifications as read:', err);
     }
@@ -80,6 +108,8 @@ const SectionUnitHeadNotifications: React.FC = () => {
     const iconMap: { [key: string]: string } = {
       task_assigned: '📋',
       task_completed: '✅',
+      task_submitted: '📤',
+      task_requires_review: '👀',
       document_approved: '📄',
       document_rejected: '❌',
       revision_required: '🔄',
@@ -97,6 +127,8 @@ const SectionUnitHeadNotifications: React.FC = () => {
     const colorMap: { [key: string]: string } = {
       task_assigned: '#3b82f6',
       task_completed: '#10b981',
+      task_submitted: '#8b5cf6',
+      task_requires_review: '#f59e0b',
       document_approved: '#10b981',
       document_rejected: '#ef4444',
       revision_required: '#f59e0b',
@@ -114,6 +146,8 @@ const SectionUnitHeadNotifications: React.FC = () => {
     const labelMap: { [key: string]: string } = {
       task_assigned: 'New Task',
       task_completed: 'Task Done',
+      task_submitted: 'Task Submitted',
+      task_requires_review: 'Needs Review',
       document_approved: 'Document OK',
       document_rejected: 'Needs Fix',
       revision_required: 'Revise Doc',
@@ -188,7 +222,6 @@ const SectionUnitHeadNotifications: React.FC = () => {
 
   const unreadCount = notifications.filter(n => !n.IS_READ).length;
   const taskNotifications = notifications.filter(n => n.TYPE.includes('task')).length;
-  const documentNotifications = notifications.filter(n => n.TYPE.includes('document')).length;
   const urgentNotifications = notifications.filter(n => ['deadline_overdue', 'system_announcement'].includes(n.TYPE)).length;
 
   const showToast = (message: string) => {
@@ -203,6 +236,47 @@ const SectionUnitHeadNotifications: React.FC = () => {
       toast.classList.remove('show');
       setTimeout(() => document.body.removeChild(toast), 300);
     }, 3000);
+  };
+
+  const transformActionUrl = (notification: Types.TaskNotificationWithDetails): string => {
+    // If notification has RELATED_TASK_ID, construct the work page URL
+    if (notification.RELATED_TASK_ID) {
+      return `${roleBasePath}/work/${notification.RELATED_TASK_ID}`;
+    }
+
+    // If no ACTION_URL, return empty string
+    if (!notification.ACTION_URL) {
+      return '';
+    }
+
+    // Transform generic ACTION_URLs to role-specific paths
+    const actionUrl = notification.ACTION_URL;
+    
+    // Handle task-related URLs
+    if (actionUrl.includes('/staff/tasks') || actionUrl.includes('/tasks')) {
+      // Extract task ID if present in URL (e.g., "/staff/tasks/123")
+      const taskIdMatch = actionUrl.match(/\/(\d+)$/);
+      if (taskIdMatch) {
+        return `${roleBasePath}/work/${taskIdMatch[1]}`;
+      }
+      // If no specific task ID, go to work page
+      return `${roleBasePath}/work`;
+    }
+
+    // Handle other generic paths by replacing with role-specific base
+    if (actionUrl.startsWith('/staff/')) {
+      const pathSuffix = actionUrl.replace('/staff', '');
+      return `${roleBasePath}${pathSuffix}`;
+    }
+
+    // For other paths, try to make them relative to the role base path
+    if (actionUrl.startsWith('/')) {
+      // If it's an absolute path that doesn't match our patterns, return as-is
+      return actionUrl;
+    }
+
+    // For relative paths, prepend the role base path
+    return `${roleBasePath}/${actionUrl}`;
   };
 
   if (loading) {
@@ -329,6 +403,8 @@ const SectionUnitHeadNotifications: React.FC = () => {
                 <option value="all">All Types</option>
                 <option value="task_assigned">Task Assigned</option>
                 <option value="task_completed">Task Completed</option>
+                <option value="task_submitted">Task Submitted</option>
+                <option value="task_requires_review">Task Requires Review</option>
                 <option value="document_approved">Document Approved</option>
                 <option value="document_rejected">Document Rejected</option>
                 <option value="revision_required">Revision Required</option>
@@ -543,12 +619,16 @@ const SectionUnitHeadNotifications: React.FC = () => {
                           </button>
                         )}
                         
-                        {notification.ACTION_URL && (
+                        {(notification.ACTION_URL || notification.RELATED_TASK_ID) && (
                           <button 
                             className="action-btn primary"
                             onClick={(e) => {
                               e.stopPropagation();
-                              window.location.href = notification.ACTION_URL;
+                              const transformedUrl = transformActionUrl(notification);
+                              if (transformedUrl) {
+                                // Use React Router navigation for better SPA behavior
+                                navigate(transformedUrl);
+                              }
                             }}
                             title="View details"
                           >

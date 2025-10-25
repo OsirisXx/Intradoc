@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { DateTimePicker } from '../common/DateTimePicker';
@@ -8,6 +9,7 @@ import './SectionUnitHead.css';
 
 const SectionUnitHeadTasks: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<Types.TaskWithDetails[]>([]);
   const [assignedTasks, setAssignedTasks] = useState<Types.TaskWithDetails[]>([]);
   const [staff, setStaff] = useState<Types.User[]>([]);
@@ -127,6 +129,11 @@ const SectionUnitHeadTasks: React.FC = () => {
     if (!user) return;
     
     // Validate required fields
+    if (!taskForm.assignedTo || taskForm.assignedTo === 0) {
+      alert('Please select someone to assign the task to.');
+      return;
+    }
+    
     if (!taskForm.dueDateTime) {
       alert('Please select a due date and time.');
       return;
@@ -149,17 +156,7 @@ const SectionUnitHeadTasks: React.FC = () => {
         sectionId: user.SECTION_ID, // Add the missing sectionId field
       });
 
-      // Create notification for assigned user
-      const assignedUser = [...heads, ...staff].find(s => s.USER_ID === taskForm.assignedTo);
-      if (assignedUser) {
-        await apiService.createNotification({
-          userId: taskForm.assignedTo,
-          type: 'task_assigned',
-          title: 'New Task Assigned',
-          message: `${user.NAME} assigned you a new task: "${taskForm.title}"`,
-          actionUrl: '/staff/tasks',
-        });
-      }
+      // Note: Notification is automatically created by the backend when task is created
 
       // Reset form and close modal
       setTaskForm({
@@ -184,10 +181,32 @@ const SectionUnitHeadTasks: React.FC = () => {
     }
   };
 
+  const handleDeleteTask = async (taskId: number, taskTitle: string) => {
+    if (!confirm(`Are you sure you want to delete "${taskTitle}"? This will also delete all linked documents and cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      const response = await apiService.deleteTask(taskId);
+      if (response.success) {
+        await loadTasks();
+        alert('Task deleted successfully!');
+      } else {
+        alert(response.error || 'Failed to delete task');
+      }
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      alert('Failed to delete task. Please try again.');
+    }
+  };
+
   // Document review handler functions
   const handleViewSubmission = (task: Types.TaskWithDetails) => {
-    setSelectedTaskForReview(task);
-    setShowDocumentModal(true);
+    if (isDivisionManager) {
+      navigate(`/division-manager/task-assignment/${task.TASK_ID}`);
+    } else {
+      navigate(`/section-unit-head/work/${task.TASK_ID}`);
+    }
   };
 
   const handleDownloadDocument = (fileLink: string, fileName: string) => {
@@ -293,8 +312,8 @@ const SectionUnitHeadTasks: React.FC = () => {
     const matchesSearch = task.TITLE.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          task.DESCRIPTION.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesSubmission = submissionFilter === 'all' || 
-      (submissionFilter === 'with_submission' && task.LINKED_DOCUMENT_ID) ||
-      (submissionFilter === 'no_submission' && !task.LINKED_DOCUMENT_ID);
+      (submissionFilter === 'with_submission' && task.STATUS === 'completed' && task.LINKED_DOCUMENT_ID) ||
+      (submissionFilter === 'no_submission' && (task.STATUS !== 'completed' || !task.LINKED_DOCUMENT_ID));
     
     return matchesStatus && matchesPriority && matchesAssignee && matchesSearch && matchesSubmission;
   });
@@ -305,7 +324,7 @@ const SectionUnitHeadTasks: React.FC = () => {
     pending: currentTasks.filter(t => t.STATUS === 'pending').length,
     inProgress: currentTasks.filter(t => t.STATUS === 'in_progress').length,
     overdue: currentTasks.filter(t => isOverdue(t.DUE_DATE, t.STATUS)).length,
-    submitted: currentTasks.filter(t => t.LINKED_DOCUMENT_ID).length,
+    submitted: currentTasks.filter(t => t.STATUS === 'completed' && t.LINKED_DOCUMENT_ID).length,
     submittedOnTime: currentTasks.filter(t => getSubmissionStatus(t) === 'on_time').length,
     submittedLate: currentTasks.filter(t => getSubmissionStatus(t) === 'late').length
   };
@@ -647,7 +666,7 @@ const SectionUnitHeadTasks: React.FC = () => {
                       {isOverdue(task.DUE_DATE, task.STATUS) && (
                         <span className="overdue-badge">OVERDUE</span>
                       )}
-                      {task.LINKED_DOCUMENT_ID && (
+                      {task.STATUS === 'completed' && task.LINKED_DOCUMENT_ID && (
                         <span className={`submission-indicator ${getSubmissionStatus(task) === 'late' ? 'submission-late' : 'submission-on-time'}`}>
                           📄 {getSubmissionStatus(task) === 'late' ? 'SUBMITTED LATE' : 'SUBMITTED'}
                         </span>
@@ -688,7 +707,7 @@ const SectionUnitHeadTasks: React.FC = () => {
                   </div>
                   
                   {/* Submission Details */}
-                  {task.LINKED_DOCUMENT_ID && task.linkedDocument ? (
+                  {task.STATUS === 'completed' && task.LINKED_DOCUMENT_ID && task.linkedDocument ? (
                     <div className="document-preview-section">
                       <div className="submission-info">
                         <h4>📄 Submitted Work</h4>
@@ -718,17 +737,29 @@ const SectionUnitHeadTasks: React.FC = () => {
                   )}
 
                   <div className="task-actions">
-                    {(task.LINKED_DOCUMENT_ID || task.linkedDocument) && (
+                    <button
+                      onClick={() => handleViewSubmission(task)}
+                      className="btn btn-secondary btn-xs"
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14,2 14,8 20,8"/>
+                      </svg>
+                      View Submission
+                    </button>
+                    
+                    {activeTab === 'assignedBy' && (
                       <button
-                        onClick={() => handleViewSubmission(task)}
-                        className="btn btn-secondary btn-xs"
+                        onClick={() => handleDeleteTask(task.TASK_ID, task.TITLE)}
+                        className="btn btn-danger btn-xs"
                         style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
                       >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                          <polyline points="14,2 14,8 20,8"/>
+                          <polyline points="3,6 5,6 21,6"/>
+                          <path d="M19,6v14a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6m3,0V4a2,2,0,0,1,2-2h4a2,2,0,0,1,2,2V6"/>
                         </svg>
-                        View Submission
+                        Delete
                       </button>
                     )}
                     
@@ -799,20 +830,28 @@ const SectionUnitHeadTasks: React.FC = () => {
                   {isOverdue(task.DUE_DATE, task.STATUS) && (
                     <span className="overdue-badge">OVERDUE</span>
                   )}
-                  {task.LINKED_DOCUMENT_ID && (
+                  {task.STATUS === 'completed' && task.LINKED_DOCUMENT_ID && (
                     <span className={`submission-indicator ${getSubmissionStatus(task) === 'late' ? 'submission-late' : 'submission-on-time'}`}>
                       📄 {getSubmissionStatus(task) === 'late' ? 'SUBMITTED LATE' : 'SUBMITTED'}
                     </span>
                   )}
                 </div>
                 <div className="task-list-actions">
-                  {(task.LINKED_DOCUMENT_ID || task.linkedDocument) && (
+                  <button
+                    onClick={() => handleViewSubmission(task)}
+                    className="btn btn-secondary btn-xs"
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
+                  >
+                    View Submission
+                  </button>
+                  
+                  {activeTab === 'assignedBy' && (
                     <button
-                      onClick={() => handleViewSubmission(task)}
-                      className="btn btn-secondary btn-xs"
+                      onClick={() => handleDeleteTask(task.TASK_ID, task.TITLE)}
+                      className="btn btn-danger btn-xs"
                       style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
                     >
-                      View Submission
+                      Delete
                     </button>
                   )}
                   
@@ -882,57 +921,55 @@ const SectionUnitHeadTasks: React.FC = () => {
                   />
                 </div>
 
-                <div className="form-row">
-                  <div className="form-group">
-                    <label htmlFor="assignee">Assign to *</label>
-                    <select
-                      id="assignee"
-                      value={taskForm.assignedTo}
-                      onChange={(e) => setTaskForm(prev => ({ ...prev, assignedTo: parseInt(e.target.value) }))}
-                      required
-                    >
-                      <option value={0}>{isDivisionManager ? 'Select member...' : 'Select staff member...'}</option>
-                      {isDivisionManager ? (
-                        <>
-                          {heads.length > 0 && (
-                            <optgroup label="Section/Unit Heads">
-                              {heads.map(member => (
-                                <option key={`head-${member.USER_ID}`} value={member.USER_ID}>
-                                  {member.NAME} ({member.ORGANIZATIONAL_ASSIGNMENT || 'Section/Unit Head'})
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
-                          {staff.length > 0 && (
-                            <optgroup label="Staff">
-                              {staff.map(member => (
-                                <option key={`staff-${member.USER_ID}`} value={member.USER_ID}>
-                                  {member.NAME} ({member.ORGANIZATIONAL_ASSIGNMENT || 'Staff'})
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
-                        </>
-                      ) : (
-                        staff.map(member => (
-                          <option key={member.USER_ID} value={member.USER_ID}>
-                            {member.NAME} ({member.ORGANIZATIONAL_ASSIGNMENT})
-                          </option>
-                        ))
-                      )}
-                    </select>
-                  </div>
+                <div className="form-group">
+                  <label htmlFor="assignee">Assign to *</label>
+                  <select
+                    id="assignee"
+                    value={taskForm.assignedTo}
+                    onChange={(e) => setTaskForm(prev => ({ ...prev, assignedTo: parseInt(e.target.value) }))}
+                    required
+                  >
+                    <option value={0}>{isDivisionManager ? 'Select member...' : 'Select staff member...'}</option>
+                    {isDivisionManager ? (
+                      <>
+                        {heads.length > 0 && (
+                          <optgroup label="Section/Unit Heads">
+                            {heads.map(member => (
+                              <option key={`head-${member.USER_ID}`} value={member.USER_ID}>
+                                {member.NAME} ({member.ORGANIZATIONAL_ROLE || 'Section/Unit Head'})
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {staff.length > 0 && (
+                          <optgroup label="Staff">
+                            {staff.map(member => (
+                              <option key={`staff-${member.USER_ID}`} value={member.USER_ID}>
+                                {member.NAME} ({member.ORGANIZATIONAL_ROLE || 'Staff'})
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </>
+                    ) : (
+                      staff.map(member => (
+                        <option key={member.USER_ID} value={member.USER_ID}>
+                          {member.NAME} ({member.ORGANIZATIONAL_ROLE})
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
 
-                  <div className="form-group">
-                    <DateTimePicker
-                      id="due-datetime"
-                      label="Due Date & Time"
-                      value={taskForm.dueDateTime}
-                      onChange={(value) => setTaskForm(prev => ({ ...prev, dueDateTime: value }))}
-                      required
-                      min={new Date().toISOString().slice(0, 16)}
-                    />
-                  </div>
+                <div className="form-group">
+                  <DateTimePicker
+                    id="due-datetime"
+                    label="Due Date & Time"
+                    value={taskForm.dueDateTime}
+                    onChange={(value) => setTaskForm(prev => ({ ...prev, dueDateTime: value }))}
+                    required
+                    min={new Date().toISOString().slice(0, 16)}
+                  />
                 </div>
 
                 <div className="form-row">

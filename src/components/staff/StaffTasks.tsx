@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { apiService } from '../../services/api'
 import { DocumentViewModal } from '../common/DocumentViewModal'
@@ -21,6 +22,7 @@ interface Task {
 
 export function StaffTasks() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -89,28 +91,7 @@ export function StaffTasks() {
 
   // Document review handler functions
   const handleViewSubmission = (task: Task) => {
-    // Open document in modal
-    if (task.LINKED_DOCUMENT_ID && task.linkedDocument) {
-      const documentId = task.linkedDocument.DOCUMENT_ID || task.LINKED_DOCUMENT_ID
-      const fileLink = task.linkedDocument.FILE_LINK || task.linkedDocument.DOCUMENT_URL || (task.linkedDocument as any).DOCUMENT_URL
-      const documentTitle = task.linkedDocument.TITLE || task.TITLE || 'Document'
-      
-      setSelectedDocument({
-        id: documentId,
-        title: documentTitle,
-        fallbackUrl: fileLink
-      })
-      setModalOpen(true)
-    } else if (task.LINKED_DOCUMENT_ID) {
-      // If we have a document ID but no linked document data
-      setSelectedDocument({
-        id: task.LINKED_DOCUMENT_ID,
-        title: task.TITLE || 'Document'
-      })
-      setModalOpen(true)
-    } else {
-      alert('No document linked to this task.')
-    }
+    navigate(`/staff/work/${task.TASK_ID}`)
   }
 
   const handleCloseModal = () => {
@@ -521,19 +502,17 @@ export function StaffTasks() {
                   )}
 
                   <div className="task-actions">
-                    {(task.LINKED_DOCUMENT_ID || task.linkedDocument) && (
-                      <button
-                        onClick={() => handleViewSubmission(task)}
-                        className="btn btn-secondary btn-xs"
-                        style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                          <polyline points="14,2 14,8 20,8"/>
-                        </svg>
-                        View Submission
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleViewSubmission(task)}
+                      className="btn btn-secondary btn-xs"
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14,2 14,8 20,8"/>
+                      </svg>
+                      View Submission
+                    </button>
                     
                     {task.STATUS === 'pending' && (
                       <button
@@ -605,15 +584,13 @@ export function StaffTasks() {
                     )}
                   </div>
                   <div className="task-list-actions">
-                    {(task.LINKED_DOCUMENT_ID || task.linkedDocument) && (
-                      <button
-                        onClick={() => handleViewSubmission(task)}
-                        className="btn btn-secondary btn-xs"
-                        style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
-                      >
-                        View Submission
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleViewSubmission(task)}
+                      className="btn btn-secondary btn-xs"
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
+                    >
+                      View Submission
+                    </button>
                     
                     {task.STATUS === 'pending' && (
                       <button

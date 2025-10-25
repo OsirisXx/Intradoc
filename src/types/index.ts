@@ -224,11 +224,14 @@ export interface User {
   PASSWORD: string;
   SECTION_ID: number;  // Users are always assigned to a SECTION
   FUNCTIONAL_ROLE: FunctionalRole;  // What they can do (staff, section_unit_head, division_manager, etc.)
-  ORGANIZATIONAL_ASSIGNMENT: OrganizationalAssignment;  // Where they work (Engineering, Planning, etc.)
+  ORGANIZATIONAL_ROLE: string;  // Where they work (Engineering, Planning, etc.)
   STATUS: 'active' | 'pending' | 'suspended' | 'inactive';
+  PROFILE_IMAGE?: string;  // URL path to profile image
   CREATED_AT: string;
   APPROVED_AT?: string;
   APPROVED_BY?: number;
+  SECTION_NAME?: string;  // From JOIN with section table
+  DIVISION_NAME?: string;  // From JOIN with division table
   // New fields for enhanced features
   NOTIFICATION_PREFERENCES?: {
     email: boolean;
@@ -492,7 +495,7 @@ export interface Task {
   ASSIGNED_BY: number; // User ID of assigner
   ASSIGNED_TO: number; // User ID of assignee
   SECTION_ID: number; // For filtering/organization
-  STATUS: 'pending' | 'in_progress' | 'completed' | 'overdue';
+  STATUS: 'pending' | 'in_progress' | 'completed' | 'cancelled';
   PRIORITY: 'low' | 'medium' | 'high' | 'urgent';
   DUE_DATE: string; // ISO date string
   CREATED_AT: string;
@@ -536,7 +539,7 @@ export interface TaskNotification {
   USER_ID: number; // Who receives this notification
   TYPE: 'task_assigned' | 'document_submitted' | 'feedback_received' | 
         'due_date_reminder' | 'revision_requested' | 'approval_received' | 
-        'task_completed' | 'document_forwarded';
+        'task_completed' | 'document_forwarded' | 'task_overdue' | 'reminder';
   TITLE: string;
   MESSAGE: string;
   RELATED_TASK_ID?: number;
@@ -557,9 +560,17 @@ export interface TaskNotificationWithDetails extends TaskNotification {
 export interface ProgressMetrics {
   totalTasks: number;
   completedTasks: number;
+  pendingTasks: number;
   overdueTasks: number;
+  totalDocuments: number;
+  approvedDocuments: number;
   pendingDocuments: number;
   completedDocuments: number;
+  totalFeedback: number;
+  readFeedback: number;
+  unreadFeedback: number;
+  systemHealthScore: number;
+  lastUpdated: string;
   feedbackCount: number;
   byDivision: {
     divisionName: string;
@@ -624,19 +635,29 @@ export interface DivisionMetrics {
   divisionName: string;
   totalTasks: number;
   completedTasks: number;
+  pendingTasks: number;
   overdueTasks: number;
+  totalSections: number;
+  totalDocuments: number;
+  approvedDocuments: number;
   completionRate: number;
   averageCompletionTime: number; // hours
+  averageResponseTime: number; // minutes
 }
 
 export interface SectionMetrics {
   sectionId: number;
   sectionName: string;
+  divisionId: number;
+  divisionName: string;
   totalTasks: number;
   completedTasks: number;
+  pendingTasks: number;
   overdueTasks: number;
+  totalUsers: number;
   completionRate: number;
   staffCount: number;
+  averageResponseTime: number; // minutes
 }
 
 export interface SystemHealth {
@@ -647,6 +668,13 @@ export interface SystemHealth {
   pendingDocuments: number;
   systemUptime: number; // hours
   lastBackup?: string;
+  overallHealthScore: number;
+  taskCompletionRate: number;
+  documentApprovalRate: number;
+  feedbackResponseRate: number;
+  averageTaskCompletionTime: number; // minutes
+  averageDocumentReviewTime: number; // minutes
+  unreadFeedback: number;
 }
 
 // Stream Posts
