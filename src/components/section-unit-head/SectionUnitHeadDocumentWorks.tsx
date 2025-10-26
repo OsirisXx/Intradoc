@@ -13,6 +13,7 @@ export function SectionUnitHeadDocumentWorks() {
   const [assignedTasks, setAssignedTasks] = useState<Types.TaskWithDetails[]>([])
   const [delayedTasks, setDelayedTasks] = useState<Types.TaskWithDetails[]>([])
   const [sectionTasks, setSectionTasks] = useState<any[]>([])
+  const [sectionDocuments, setSectionDocuments] = useState<any[]>([])
   const [selectedTask, setSelectedTask] = useState<Types.TaskWithDetails | null>(null)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -55,10 +56,10 @@ export function SectionUnitHeadDocumentWorks() {
         setDelayedTasks(delayed)
       }
       
-      // Also store tasks assigned BY section unit head for status display
+      // Store tasks assigned BY section unit head (for task list on left)
       if (assignedByResponse.success) {
         const tasksAssignedBy = assignedByResponse.data || []
-        setSectionTasks(tasksAssignedBy) // Use this for status display
+        setSectionTasks(tasksAssignedBy)
       }
     } catch (error) {
       console.error('Error loading user tasks:', error)
@@ -66,8 +67,23 @@ export function SectionUnitHeadDocumentWorks() {
   }
 
   const loadSectionDocuments = async () => {
-    // This function is no longer needed since we're using tasks for status display
-    // Keeping it for compatibility but it doesn't do anything
+    if (!user) return
+    
+    try {
+      const response = await apiService.getDocumentsBySection(user.SECTION_ID)
+      
+      if (response.success) {
+        // Filter to show only documents from staff in this section
+        const sectionDocs = response.data?.filter(doc => 
+          doc.SECTION_ID === user.SECTION_ID
+        ) || []
+        setSectionDocuments(sectionDocs)
+      } else {
+        console.error('Failed to load section documents:', response.error)
+      }
+    } catch (error) {
+      console.error('Error loading section documents:', error)
+    }
   }
 
   const handleTaskClick = (task: Types.TaskWithDetails) => {
@@ -142,6 +158,23 @@ export function SectionUnitHeadDocumentWorks() {
       alert('Error uploading document. Please try again.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const getDocumentStatusBadge = (status: string) => {
+    switch (status) {
+      case 'Approved':
+        return <span className="status-badge approved">APPROVED</span>
+      case 'Submitted':
+        return <span className="status-badge pending">SUBMITTED</span>
+      case 'On-Going':
+        return <span className="status-badge draft">ON-GOING</span>
+      case 'Delayed':
+        return <span className="status-badge cancelled">DELAYED</span>
+      case 'Draft':
+        return <span className="status-badge draft">DRAFT</span>
+      default:
+        return <span className="status-badge draft">{status.toUpperCase()}</span>
     }
   }
 
@@ -267,55 +300,29 @@ export function SectionUnitHeadDocumentWorks() {
             <h2 style={{ color: 'white' }}>STATUS</h2>
           </div>
           <div className="status-table">
-            {sectionTasks.length === 0 ? (
+            {sectionDocuments.length === 0 ? (
               <div className="empty-state">
-                No tasks assigned yet
+                No documents submitted yet
               </div>
             ) : (
               <table>
                 <thead>
                   <tr>
-                    <th>TASK TITLE</th>
+                    <th>TITLE</th>
                     <th>STATUS</th>
-                    <th>SUBMISSION</th>
-                    <th>ASSIGNED TO</th>
-                    <th>DUE DATE</th>
+                    <th>SHA-256</th>
+                    <th>SUBMITTED BY</th>
+                    <th>CREATED</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sectionTasks.map(task => (
-                    <tr key={task.TASK_ID}>
-                      <td>{task.TITLE}</td>
-                      <td>{getTaskStatusBadge(task.STATUS)}</td>
-                      <td>
-                        {task.STATUS === 'completed' && task.LINKED_DOCUMENT_ID ? (
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            fontSize: '10px',
-                            fontWeight: '600',
-                            backgroundColor: getSubmissionStatus(task) === 'late' ? '#fee2e2' : '#dcfce7',
-                            color: getSubmissionStatus(task) === 'late' ? '#991b1b' : '#166534',
-                            border: `1px solid ${getSubmissionStatus(task) === 'late' ? '#fecaca' : '#bbf7d0'}`
-                          }}>
-                            {getSubmissionStatus(task) === 'late' ? 'SUBMITTED LATE' : 'SUBMITTED'}
-                          </span>
-                        ) : (
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            fontSize: '10px',
-                            fontWeight: '600',
-                            backgroundColor: '#f3f4f6',
-                            color: '#6b7280',
-                            border: '1px solid #d1d5db'
-                          }}>
-                            NOT SUBMITTED
-                          </span>
-                        )}
-                      </td>
-                      <td>{task.ASSIGNED_TO_NAME || `User #${task.ASSIGNED_TO}` || 'Unknown'}</td>
-                      <td>{formatDate(task.DUE_DATE)}</td>
+                  {sectionDocuments.map(doc => (
+                    <tr key={doc.DOCUMENT_ID}>
+                      <td>{doc.TITLE}</td>
+                      <td>{getDocumentStatusBadge(doc.currentStatus?.STATUS || 'Submitted')}</td>
+                      <td>{doc.FINGERPRINT_HASH.substring(0, 12)}...</td>
+                      <td>{doc.CREATED_BY_NAME || `User #${doc.CREATED_BY}` || 'Unknown'}</td>
+                      <td>{formatDate(doc.CREATED_AT)}</td>
                     </tr>
                   ))}
                 </tbody>

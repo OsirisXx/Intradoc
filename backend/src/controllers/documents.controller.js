@@ -67,7 +67,15 @@ exports.getDocuments = async (req, res) => {
 
     // Filter based on role
     if (userRole === 'staff') {
-      query += ' WHERE d.CREATED_BY = ?';
+      query += ` WHERE d.CREATED_BY = ? AND d.TITLE NOT LIKE "%(Forwarded)%"
+        AND d.DOCUMENT_ID IN (
+          SELECT MAX(d2.DOCUMENT_ID)
+          FROM document d2
+          WHERE d2.CREATED_BY = ?
+            AND d2.TITLE NOT LIKE "%(Forwarded)%"
+            AND d2.FINGERPRINT_HASH = d.FINGERPRINT_HASH
+          GROUP BY d2.FINGERPRINT_HASH
+        )`;
     } else if (userRole === 'admin') {
       // Admin sees all
     } else {
@@ -77,7 +85,7 @@ exports.getDocuments = async (req, res) => {
       )`;
     }
 
-    const [documents] = await pool.query(query, [userId]);
+    const [documents] = await pool.query(query, userRole === 'staff' ? [userId, userId] : [userId]);
     res.json({ success: true, data: documents });
   } catch (error) {
     console.error('Get documents error:', error);
