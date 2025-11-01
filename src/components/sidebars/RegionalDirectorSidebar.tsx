@@ -1,7 +1,65 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
+import { useAuth } from '../../contexts/AuthContext'
+import { apiService } from '../../services/api'
 
 export function RegionalDirectorSidebar() {
+  const { user } = useAuth()
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    if (user) {
+      loadUnreadCount()
+    }
+  }, [user])
+
+  // Refresh unread count when page becomes visible (user navigates back)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && user) {
+        loadUnreadCount()
+      }
+    }
+
+    // Also refresh when user navigates to/from notifications page
+    const handleRouteChange = () => {
+      if (user) {
+        loadUnreadCount()
+      }
+    }
+
+    // Listen for custom event when notifications are updated
+    const handleNotificationsUpdated = () => {
+      console.log('Received notificationsUpdated event') // Debug log
+      if (user) {
+        loadUnreadCount()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('popstate', handleRouteChange)
+    window.addEventListener('notificationsUpdated', handleNotificationsUpdated)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('popstate', handleRouteChange)
+      window.removeEventListener('notificationsUpdated', handleNotificationsUpdated)
+    }
+  }, [user])
+
+  const loadUnreadCount = async () => {
+    try {
+      const response = await apiService.getNotifications(user?.USER_ID || 0)
+      if (response.success) {
+        const unread = response.data?.filter(n => !n.IS_READ).length || 0
+        setUnreadCount(unread)
+        console.log('Loaded unread count:', unread) // Debug log
+      }
+    } catch (error) {
+      console.error('Error loading unread count:', error)
+    }
+  }
+
   return (
     <aside className="sidebar">
       <div className="brand">IntraDoc</div>
@@ -33,6 +91,22 @@ export function RegionalDirectorSidebar() {
             <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
           </svg>
           Notifications
+          {unreadCount > 0 && (
+            <span style={{
+              background: '#dc2626',
+              color: 'white',
+              borderRadius: '50%',
+              width: '18px',
+              height: '18px',
+              fontSize: '11px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginLeft: 'auto'
+            }}>
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
         </NavLink>
         
         <NavLink to="/regional-director/settings" className="nav-link">

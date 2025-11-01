@@ -14,18 +14,7 @@ import { StaffTasks } from './components/staff/StaffTasks'
 import { StaffNotifications } from './components/staff/StaffNotifications'
 import { StaffFeedback } from './components/staff/StaffFeedback'
 import { StaffSettings } from './components/staff/StaffSettings'
-import { AdminTopbar } from './components/admin/AdminTopbar'
 import { AdminDashboard } from './components/admin/AdminDashboard'
-import { AdminDocuments } from './components/admin/AdminDocuments'
-import { AdminRequirements } from './components/admin/AdminRequirements'
-import { AdminApprovals } from './components/admin/AdminApprovals'
-import { AdminTracking } from './components/admin/AdminTracking'
-import { AdminNotifications } from './components/admin/AdminNotifications'
-import { AdminWorkflow } from './components/admin/AdminWorkflow'
-import { AdminAnnouncements } from './components/admin/AdminAnnouncements'
-import { AdminPosts } from './components/admin/AdminPosts'
-import { AdminUsers } from './components/admin/AdminUsers'
-import { AdminTools } from './components/admin/AdminTools'
 import { AdminAccountManagement } from './components/admin/AdminAccountManagement'
 import { AuthProvider } from './contexts/AuthContext'
 import { DialogProvider } from './components/ui/DialogProvider'
@@ -77,20 +66,10 @@ function App() {
               <div className={`app-shell ${!sidebarOpen ? 'sidebar-closed' : ''}`}>
                 <DynamicSidebar />
                 <main className="main">
-                  <AdminTopbar onToggleSidebar={toggleSidebar} />
+                  <StaffTopbar onToggleSidebar={toggleSidebar} />
                   <div className="content">
                     <Routes>
                       <Route path="/" element={<AdminDashboard />} />
-                      <Route path="/documents" element={<AdminDocuments />} />
-                      <Route path="/requirements" element={<AdminRequirements />} />
-                      <Route path="/approvals" element={<AdminApprovals />} />
-                      <Route path="/tracking" element={<AdminTracking />} />
-                      <Route path="/notifications" element={<AdminNotifications />} />
-                      <Route path="/workflow" element={<AdminWorkflow />} />
-                      <Route path="/announcements" element={<AdminAnnouncements />} />
-                      <Route path="/posts" element={<AdminPosts />} />
-                      <Route path="/users" element={<AdminUsers />} />
-                      <Route path="/admin" element={<AdminTools />} />
                       <Route path="/account-management" element={<AdminAccountManagement />} />
                     </Routes>
                   </div>

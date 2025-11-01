@@ -40,8 +40,13 @@ export function DivisionManagerDashboard() {
         ? apiService.getAllTasksForOversight()
         : apiService.getTasksAssignedTo(user?.USER_ID || 0)
       
+      // Use getDocuments for Regional Director to see all documents, getDocumentsBySection for others
+      const documentsToFetch = isRegionalDirector
+        ? apiService.getDocuments(user?.USER_ID || 0)
+        : apiService.getDocumentsBySection(user?.SECTION_ID || 0)
+      
       const [documentsRes, notificationsRes, tasksRes, postsRes, progressRes] = await Promise.all([
-        apiService.getDocumentsBySection(user?.SECTION_ID || 0),
+        documentsToFetch,
         apiService.getNotifications(user?.USER_ID || 0),
         tasksToFetch,
         apiService.getAllPosts(),
@@ -580,11 +585,13 @@ export function DivisionManagerDashboard() {
             <table className="document-status-table" style={{ width: '100%', tableLayout: 'fixed' }}>
               <thead>
                 <tr>
-                  <th style={{ width: '30%', textAlign: 'left' }}>DOCUMENT</th>
-                  <th style={{ width: '20%', textAlign: 'center' }}>CURRENT STATUS</th>
-                  <th style={{ width: '20%', textAlign: 'center' }}>NEXT STEP</th>
-                  <th style={{ width: '15%', textAlign: 'center' }}>DEPARTMENT</th>
-                  <th style={{ width: '15%', textAlign: 'center' }}>LAST UPDATED</th>
+                  <th style={{ width: '20%', textAlign: 'left' }}>DOCUMENT</th>
+                  <th style={{ width: '12%', textAlign: 'center' }}>CURRENT STATUS</th>
+                  <th style={{ width: '12%', textAlign: 'center' }}>NEXT STEP</th>
+                  <th style={{ width: '12%', textAlign: 'center' }}>DEPARTMENT</th>
+                  <th style={{ width: '12%', textAlign: 'center' }}>SHA-256</th>
+                  <th style={{ width: '12%', textAlign: 'center' }}>UPLOADED BY</th>
+                  <th style={{ width: '20%', textAlign: 'center' }}>LAST UPDATED</th>
                 </tr>
               </thead>
               <tbody>
@@ -606,6 +613,16 @@ export function DivisionManagerDashboard() {
                     <td style={{ textAlign: 'center', padding: '12px 8px' }}>
                       <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
                         {doc.SECTION_NAME || 'Unknown'}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'center', padding: '12px 8px' }}>
+                      <span style={{ fontSize: '0.875rem', color: '#6b7280', fontFamily: 'monospace' }}>
+                        {doc.FINGERPRINT_HASH ? doc.FINGERPRINT_HASH.substring(0, 12) + '...' : 'N/A'}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'center', padding: '12px 8px' }}>
+                      <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                        {doc.CREATED_BY_NAME || 'Unknown'}
                       </span>
                     </td>
                     <td style={{ textAlign: 'center', padding: '12px 8px' }}>

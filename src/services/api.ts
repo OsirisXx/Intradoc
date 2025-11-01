@@ -844,6 +844,26 @@ class ApiService {
     }
   }
 
+  async updateUserRole(userId: number, functionalRole: string): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.put(`/users/${userId}/role`, { functionalRole });
+      return response;
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      return { success: false, error: 'Failed to update user role' };
+    }
+  }
+
+  async deleteUser(userId: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.delete(`/users/${userId}`);
+      return response;
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      return { success: false, error: 'Failed to delete user' };
+    }
+  }
+
   // Auto-notification helper methods
   private sendDocumentApprovalNotifications(document: DocumentWithDetails, newStatus: string, remarks?: string): void {
     const documentCreator = document.createdByUser;

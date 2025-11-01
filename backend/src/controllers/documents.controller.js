@@ -76,8 +76,8 @@ exports.getDocuments = async (req, res) => {
             AND d2.FINGERPRINT_HASH = d.FINGERPRINT_HASH
           GROUP BY d2.FINGERPRINT_HASH
         )`;
-    } else if (userRole === 'admin') {
-      // Admin sees all
+    } else if (userRole === 'admin' || userRole === 'regional_director') {
+      // Admin and Regional Director see all
     } else {
       // Section heads, managers see their section's documents
       query += ` WHERE d.SECTION_ID IN (
@@ -568,11 +568,12 @@ exports.getDocumentProgress = async (req, res) => {
     const userRole = users[0].FUNCTIONAL_ROLE;
     const isRegionalDirector = userRole === 'regional_director';
     const isDivisionManager = userRole === 'division_manager';
-    const canSeeAllDocuments = isRegionalDirector || isDivisionManager;
+    const isAdmin = userRole === 'admin';
+    const canSeeAllDocuments = isRegionalDirector || isDivisionManager || isAdmin;
     
     // Build WHERE clause based on role
     const whereClause = canSeeAllDocuments 
-      ? 'WHERE 1=1' // Regional Director and Division Manager see all documents
+      ? 'WHERE 1=1' // Regional Director, Division Manager, and Admin see all documents
       : 'WHERE d.CREATED_BY = ?';
     
     const queryParams = canSeeAllDocuments ? [] : [userId, userId];
@@ -589,9 +590,11 @@ exports.getDocumentProgress = async (req, res) => {
         d.FINGERPRINT_HASH,
         s.NAME as SECTION_NAME,
         ds.STATUS as CURRENT_STATUS,
-        ds.CREATED_AT as LAST_UPDATED
+        ds.CREATED_AT as LAST_UPDATED,
+        u.NAME as CREATED_BY_NAME
       FROM document d
       LEFT JOIN section s ON d.SECTION_ID = s.SECTION_ID
+      LEFT JOIN user u ON d.CREATED_BY = u.USER_ID
       LEFT JOIN (
         SELECT DOCUMENT_ID, STATUS, CREATED_AT
         FROM document_status

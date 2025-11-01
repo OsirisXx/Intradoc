@@ -347,6 +347,121 @@ exports.getDivisionManagers = async (req, res) => {
   }
 };
 
+// Update user role (admin only)
+exports.updateUserRole = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { functionalRole } = req.body;
+    const adminUserId = req.user.USER_ID;
+
+    // Validate admin role
+    const [adminUser] = await pool.query(
+      'SELECT FUNCTIONAL_ROLE FROM user WHERE USER_ID = ?',
+      [adminUserId]
+    );
+
+    if (adminUser.length === 0 || adminUser[0].FUNCTIONAL_ROLE !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Only admins can update user roles' });
+    }
+
+    // Validate functional role
+    const validRoles = ['staff', 'section_unit_head', 'division_manager', 'regional_director', 'admin'];
+    if (!functionalRole || !validRoles.includes(functionalRole)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid functional role. Must be one of: ' + validRoles.join(', ') 
+      });
+    }
+
+    // Prevent self-demotion from admin role
+    if (parseInt(userId) === adminUserId && functionalRole !== 'admin') {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'You cannot remove your own admin role' 
+      });
+    }
+
+    // Get user info for audit
+    const [users] = await pool.query(
+      'SELECT NAME, FUNCTIONAL_ROLE FROM user WHERE USER_ID = ?',
+      [userId]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const oldRole = users[0].FUNCTIONAL_ROLE;
+    const userName = users[0].NAME;
+
+    // Update user role
+    await pool.query(
+      'UPDATE user SET FUNCTIONAL_ROLE = ? WHERE USER_ID = ?',
+      [functionalRole, userId]
+    );
+
+    res.json({
+      success: true,
+      message: `User ${userName} role updated from ${oldRole} to ${functionalRole}`
+    });
+  } catch (error) {
+    console.error('Update user role error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update user role' });
+  }
+};
+
+// Delete user (admin only)
+exports.deleteUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const adminUserId = req.user.USER_ID;
+
+    // Validate admin role
+    const [adminUser] = await pool.query(
+      'SELECT FUNCTIONAL_ROLE FROM user WHERE USER_ID = ?',
+      [adminUserId]
+    );
+
+    if (adminUser.length === 0 || adminUser[0].FUNCTIONAL_ROLE !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Only admins can delete users' });
+    }
+
+    // Prevent self-deletion
+    if (parseInt(userId) === adminUserId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'You cannot delete your own account' 
+      });
+    }
+
+    // Get user info for audit
+    const [users] = await pool.query(
+      'SELECT NAME FROM user WHERE USER_ID = ?',
+      [userId]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const userName = users[0].NAME;
+
+    // Soft delete: Update status to 'inactive'
+    await pool.query(
+      'UPDATE user SET STATUS = "inactive" WHERE USER_ID = ?',
+      [userId]
+    );
+
+    res.json({
+      success: true,
+      message: `User ${userName} has been deleted successfully`
+    });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete user' });
+  }
+};
+
 // Export multer middleware
 exports.profileUpload = profileUpload;
 

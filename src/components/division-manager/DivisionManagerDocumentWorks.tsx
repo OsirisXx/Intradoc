@@ -10,7 +10,7 @@ export function DivisionManagerDocumentWorks() {
   const [activeTab, setActiveTab] = useState<'assigned' | 'delayed'>('assigned')
   const [assignedTasks, setAssignedTasks] = useState<Types.TaskWithDetails[]>([])
   const [delayedTasks, setDelayedTasks] = useState<Types.TaskWithDetails[]>([])
-  const [divisionTasks, setDivisionTasks] = useState<any[]>([])
+  const [divisionDocuments, setDivisionDocuments] = useState<any[]>([])
   const [selectedTask, setSelectedTask] = useState<Types.TaskWithDetails | null>(null)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -28,7 +28,7 @@ export function DivisionManagerDocumentWorks() {
     if (!user) return
     try {
       const assignedToResponse = await apiService.getTasksAssignedTo(user.USER_ID)
-      const assignedByResponse = await apiService.getTasksAssignedBy(user.USER_ID)
+      const documentsResponse = await apiService.getDocumentsBySection(user.SECTION_ID || 0)
 
       if (assignedToResponse.success) {
         const allTasksAssignedTo = assignedToResponse.data || []
@@ -38,9 +38,9 @@ export function DivisionManagerDocumentWorks() {
         setDelayedTasks(delayed)
       }
 
-      if (assignedByResponse.success) {
-        const tasksAssignedBy = assignedByResponse.data || []
-        setDivisionTasks(tasksAssignedBy)
+      if (documentsResponse.success) {
+        const docs = documentsResponse.data || []
+        setDivisionDocuments(docs)
       }
     } catch (error) {
       console.error('Error loading user tasks:', error)
@@ -117,6 +117,27 @@ export function DivisionManagerDocumentWorks() {
         return <span className="status-badge cancelled">OVERDUE</span>
       default:
         return <span className="status-badge draft">{status.toUpperCase()}</span>
+    }
+  }
+
+  const getDocumentStatusBadge = (status: string) => {
+    switch (status) {
+      case 'Submitted':
+        return <span className="status-badge pending">SUBMITTED</span>
+      case 'Under_Section_Review':
+        return <span className="status-badge pending">UNDER REVIEW</span>
+      case 'Under_Division_Review':
+        return <span className="status-badge pending">DIVISION REVIEW</span>
+      case 'Under_Regional_Review':
+        return <span className="status-badge pending">REGIONAL REVIEW</span>
+      case 'Approved':
+        return <span className="status-badge approved">APPROVED</span>
+      case 'Revision_Required':
+        return <span className="status-badge draft">REVISION NEEDED</span>
+      case 'Rejected':
+        return <span className="status-badge draft">REJECTED</span>
+      default:
+        return <span className="status-badge draft">{status}</span>
     }
   }
 
@@ -220,55 +241,29 @@ export function DivisionManagerDocumentWorks() {
             <h2 style={{ color: 'white' }}>STATUS</h2>
           </div>
           <div className="status-table">
-            {divisionTasks.length === 0 ? (
+            {divisionDocuments.length === 0 ? (
               <div className="empty-state">
-                No tasks assigned yet
+                No documents submitted yet
               </div>
             ) : (
               <table>
                 <thead>
                   <tr>
-                    <th>TASK TITLE</th>
+                    <th>TITLE</th>
                     <th>STATUS</th>
-                    <th>SUBMISSION</th>
-                    <th>ASSIGNED TO</th>
-                    <th>DUE DATE</th>
+                    <th>SHA-256</th>
+                    <th>SUBMITTED BY</th>
+                    <th>CREATED</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {divisionTasks.map(task => (
-                    <tr key={task.TASK_ID}>
-                      <td>{task.TITLE}</td>
-                      <td>{getTaskStatusBadge(task.STATUS)}</td>
-                      <td>
-                        {task.LINKED_DOCUMENT_ID ? (
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            fontSize: '10px',
-                            fontWeight: '600',
-                            backgroundColor: getSubmissionStatus(task) === 'late' ? '#fee2e2' : '#dcfce7',
-                            color: getSubmissionStatus(task) === 'late' ? '#991b1b' : '#166534',
-                            border: `1px solid ${getSubmissionStatus(task) === 'late' ? '#fecaca' : '#bbf7d0'}`
-                          }}>
-                            {getSubmissionStatus(task) === 'late' ? 'SUBMITTED LATE' : 'SUBMITTED'}
-                          </span>
-                        ) : (
-                          <span style={{
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            fontSize: '10px',
-                            fontWeight: '600',
-                            backgroundColor: '#f3f4f6',
-                            color: '#6b7280',
-                            border: '1px solid #d1d5db'
-                          }}>
-                            NOT SUBMITTED
-                          </span>
-                        )}
-                      </td>
-                      <td>{task.ASSIGNED_TO_NAME || `User #${task.ASSIGNED_TO}` || 'Unknown'}</td>
-                      <td>{formatDate(task.DUE_DATE)}</td>
+                  {divisionDocuments.map(doc => (
+                    <tr key={doc.DOCUMENT_ID}>
+                      <td>{doc.TITLE}</td>
+                      <td>{getDocumentStatusBadge(doc.currentStatus?.STATUS || 'Submitted')}</td>
+                      <td>{doc.FINGERPRINT_HASH.substring(0, 12)}...</td>
+                      <td>{doc.CREATED_BY_NAME || `User #${doc.CREATED_BY}` || 'Unknown'}</td>
+                      <td>{formatDate(doc.CREATED_AT)}</td>
                     </tr>
                   ))}
                 </tbody>
