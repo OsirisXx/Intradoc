@@ -590,7 +590,8 @@ export interface ProgressMetrics {
 export interface TaskCreationForm {
   title: string;
   description: string;
-  assignedTo: number;
+  assignedTo?: number;
+  assignedToIds?: number[];
   assignedBy: number; // Required field for backend - who created the task
   dueDate: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';

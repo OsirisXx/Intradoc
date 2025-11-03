@@ -93,6 +93,112 @@ exports.getDocuments = async (req, res) => {
   }
 };
 
+// Archive a document for current viewer (per-user visibility)
+exports.archiveDocumentForViewer = async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const userId = req.user.userId;
+
+    // Ensure document exists
+    const [docs] = await pool.query('SELECT DOCUMENT_ID FROM document WHERE DOCUMENT_ID = ?', [documentId]);
+    if (docs.length === 0) {
+      return res.status(404).json({ success: false, error: 'Document not found' });
+    }
+
+    await pool.query(
+      `INSERT INTO archive (DOCUMENT_ID, VIEWER_USER_ID, CONTEXT, ARCHIVED_BY, DATE_ARCHIVED)
+       VALUES (?, ?, 'reports', ?, NOW())
+       ON DUPLICATE KEY UPDATE DATE_ARCHIVED = VALUES(DATE_ARCHIVED)`,
+      [documentId, userId, userId]
+    );
+
+    res.json({ success: true, message: 'Document archived for viewer' });
+  } catch (error) {
+    console.error('Archive document for viewer error:', error);
+    res.status(500).json({ success: false, error: 'Failed to archive document' });
+  }
+};
+
+// Unarchive a document for current viewer
+exports.unarchiveDocumentForViewer = async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const userId = req.user.userId;
+
+    await pool.query(
+      `DELETE FROM archive WHERE DOCUMENT_ID = ? AND VIEWER_USER_ID = ? AND CONTEXT = 'reports'`,
+      [documentId, userId]
+    );
+
+    res.json({ success: true, message: 'Document unarchived for viewer' });
+  } catch (error) {
+    console.error('Unarchive document for viewer error:', error);
+    res.status(500).json({ success: false, error: 'Failed to unarchive document' });
+  }
+};
+
+// Bulk archive documents for current viewer
+exports.bulkArchiveDocumentsForViewer = async (req, res) => {
+  try {
+    const { documentIds } = req.body;
+    const userId = req.user.userId;
+    if (!Array.isArray(documentIds) || documentIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'documentIds array is required' });
+    }
+
+    const values = documentIds.map(() => '(?, ?, \'reports\', ?, NOW())').join(',');
+    const params = documentIds.flatMap((id) => [id, userId, userId]);
+
+    await pool.query(
+      `INSERT INTO archive (DOCUMENT_ID, VIEWER_USER_ID, CONTEXT, ARCHIVED_BY, DATE_ARCHIVED)
+       VALUES ${values}
+       ON DUPLICATE KEY UPDATE DATE_ARCHIVED = VALUES(DATE_ARCHIVED)`,
+      params
+    );
+
+    res.json({ success: true, message: 'Documents archived' });
+  } catch (error) {
+    console.error('Bulk archive documents error:', error);
+    res.status(500).json({ success: false, error: 'Failed to bulk archive documents' });
+  }
+};
+
+// List archived documents for current viewer (reports context)
+exports.listArchivedDocumentsForViewer = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const [rows] = await pool.query(
+      `SELECT d.*, 
+              dc.NAME as CATEGORY_NAME,
+              s.NAME as SECTION_NAME,
+              creator.NAME as CREATED_BY_NAME,
+              ds.STATUS as CURRENT_STATUS,
+              a.DATE_ARCHIVED
+       FROM archive a
+       JOIN document d ON d.DOCUMENT_ID = a.DOCUMENT_ID
+       LEFT JOIN document_category dc ON d.CATEGORY_ID = dc.CATEGORY_ID
+       LEFT JOIN section s ON d.SECTION_ID = s.SECTION_ID
+       LEFT JOIN user creator ON d.CREATED_BY = creator.USER_ID
+       LEFT JOIN (
+         SELECT DOCUMENT_ID, STATUS 
+         FROM document_status 
+         WHERE STATUS_ID IN (
+           SELECT MAX(STATUS_ID) 
+           FROM document_status 
+           GROUP BY DOCUMENT_ID
+         )
+       ) ds ON d.DOCUMENT_ID = ds.DOCUMENT_ID
+       WHERE a.VIEWER_USER_ID = ? AND a.CONTEXT = 'reports'
+       ORDER BY a.DATE_ARCHIVED DESC`,
+      [userId]
+    );
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('List archived documents error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch archived documents' });
+  }
+};
+
 // Upload new document
 exports.uploadDocument = [upload.single('file'), async (req, res) => {
   try {
@@ -935,6 +1041,12 @@ exports.getDocumentsBySection = async (req, res) => {
         )
       ) ds ON d.DOCUMENT_ID = ds.DOCUMENT_ID
       WHERE d.SECTION_ID = ?
+        AND NOT EXISTS (
+          SELECT 1 FROM archive a
+          WHERE a.DOCUMENT_ID = d.DOCUMENT_ID
+            AND a.VIEWER_USER_ID = ?
+            AND (a.CONTEXT = 'reports' OR a.CONTEXT IS NULL)
+        )
         AND d.DOCUMENT_ID IN (
           SELECT MAX(d2.DOCUMENT_ID)
           FROM document d2
@@ -943,7 +1055,7 @@ exports.getDocumentsBySection = async (req, res) => {
           GROUP BY d2.FINGERPRINT_HASH
         )
       ORDER BY d.CREATED_AT DESC
-    `, [sectionId, sectionId]);
+    `, [sectionId, req.user.userId, sectionId]);
     
     documents = sectionDocuments;
     

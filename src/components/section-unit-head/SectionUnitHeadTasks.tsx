@@ -6,10 +6,12 @@ import { DateTimePicker } from '../common/DateTimePicker';
 import * as Types from '../../types';
 import { taskUtils } from '../../utils/taskUtils';
 import './SectionUnitHead.css';
+import { useDialogContext } from '../ui/DialogProvider';
 
 const SectionUnitHeadTasks: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const dialog = useDialogContext();
   const [tasks, setTasks] = useState<Types.TaskWithDetails[]>([]);
   const [assignedTasks, setAssignedTasks] = useState<Types.TaskWithDetails[]>([]);
   const [staff, setStaff] = useState<Types.User[]>([]);
@@ -36,13 +38,29 @@ const SectionUnitHeadTasks: React.FC = () => {
   const [taskForm, setTaskForm] = useState({
     title: '',
     description: '',
-    assignedTo: 0,
+    assignedToIds: [] as number[],
     dueDateTime: '',
     priority: 'medium' as 'low' | 'medium' | 'high' | 'urgent',
     category: '',
     tags: '',
     requiresDocument: false,
   });
+
+  // Modern chooser helpers
+  const [assigneeSearch, setAssigneeSearch] = useState('');
+  const normalizedQuery = assigneeSearch.trim().toLowerCase();
+  const filteredHeads = heads.filter(m => (m.NAME || '').toLowerCase().includes(normalizedQuery));
+  const filteredStaff = staff.filter(m => (m.NAME || '').toLowerCase().includes(normalizedQuery));
+  const isSelected = (id: number) => taskForm.assignedToIds.includes(id);
+  const toggleId = (id: number, next: boolean) => {
+    setTaskForm(prev => {
+      const set = new Set(prev.assignedToIds);
+      if (next) set.add(id); else set.delete(id);
+      return { ...prev, assignedToIds: Array.from(set) };
+    });
+  };
+  const selectVisible = (ids: number[]) => setTaskForm(prev => ({ ...prev, assignedToIds: Array.from(new Set([...prev.assignedToIds, ...ids])) }));
+  const clearVisible = (ids: number[]) => setTaskForm(prev => ({ ...prev, assignedToIds: prev.assignedToIds.filter(id => !ids.includes(id)) }));
 
   useEffect(() => {
     if (user) {
@@ -129,8 +147,8 @@ const SectionUnitHeadTasks: React.FC = () => {
     if (!user) return;
     
     // Validate required fields
-    if (!taskForm.assignedTo || taskForm.assignedTo === 0) {
-      alert('Please select someone to assign the task to.');
+    if (!taskForm.assignedToIds || taskForm.assignedToIds.length === 0) {
+      alert('Please select at least one assignee.');
       return;
     }
     
@@ -146,7 +164,7 @@ const SectionUnitHeadTasks: React.FC = () => {
       await apiService.createTask({
         title: taskForm.title,
         description: taskForm.description,
-        assignedTo: taskForm.assignedTo,
+        assignedToIds: taskForm.assignedToIds,
         assignedBy: user.USER_ID, // Add the missing assignedBy field
         dueDate: dueDateForAPI,
         priority: taskForm.priority,
@@ -162,7 +180,7 @@ const SectionUnitHeadTasks: React.FC = () => {
       setTaskForm({
         title: '',
         description: '',
-        assignedTo: 0,
+        assignedToIds: [],
         dueDateTime: '',
         priority: 'medium',
         category: '',
@@ -316,6 +334,18 @@ const SectionUnitHeadTasks: React.FC = () => {
       (submissionFilter === 'no_submission' && (task.STATUS !== 'completed' || !task.LINKED_DOCUMENT_ID));
     
     return matchesStatus && matchesPriority && matchesAssignee && matchesSearch && matchesSubmission;
+  });
+
+  // Sort: overdue first, then in_progress, pending, completed last; within group by due date asc
+  const statusRank: Record<string, number> = { in_progress: 1, pending: 2, completed: 4, cancelled: 5 };
+  const sortedTasks = [...filteredTasks].sort((a, b) => {
+    const aOverdue = isOverdue(a.DUE_DATE, a.STATUS);
+    const bOverdue = isOverdue(b.DUE_DATE, b.STATUS);
+    if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
+    const rankA = statusRank[a.STATUS] ?? 3;
+    const rankB = statusRank[b.STATUS] ?? 3;
+    if (rankA !== rankB) return rankA - rankB;
+    return new Date(a.DUE_DATE).getTime() - new Date(b.DUE_DATE).getTime();
   });
 
   const taskSummary = {
@@ -622,7 +652,7 @@ const SectionUnitHeadTasks: React.FC = () => {
         </div>
       )}
 
-      {filteredTasks.length === 0 ? (
+      {sortedTasks.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">
             <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -651,7 +681,7 @@ const SectionUnitHeadTasks: React.FC = () => {
         </div>
       ) : viewMode === 'card' ? (
         <div className="tasks-grid">
-          {filteredTasks.map(task => (
+          {sortedTasks.map(task => (
             <div 
               key={task.TASK_ID} 
               className={`task-card ${isOverdue(task.DUE_DATE, task.STATUS) ? 'overdue' : ''}`}
@@ -750,31 +780,45 @@ const SectionUnitHeadTasks: React.FC = () => {
                     </button>
                     
                     {activeTab === 'assignedBy' && (
-                      <button
-                        onClick={() => handleDeleteTask(task.TASK_ID, task.TITLE)}
-                        className="btn btn-danger btn-xs"
-                        style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polyline points="3,6 5,6 21,6"/>
-                          <path d="M19,6v14a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6m3,0V4a2,2,0,0,1,2-2h4a2,2,0,0,1,2,2V6"/>
-                        </svg>
-                        Delete
-                      </button>
+                      <>
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const ok = await dialog.confirm({
+                              title: 'Archive Task',
+                              message: `Archive "${task.TITLE}"? It will be hidden from active lists for you and the assignee.`,
+                              type: 'warning',
+                              confirmText: 'Archive',
+                              cancelText: 'Cancel'
+                            });
+                            if (!ok) return;
+                            try {
+                              const resp = await apiService.archiveTask(task.TASK_ID);
+                              if (resp.success) {
+                                setAssignedTasks(prev => prev.filter(t => t.TASK_ID !== task.TASK_ID));
+                              }
+                            } catch (_) {}
+                          }}
+                          className="btn btn-secondary btn-xs"
+                          style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px', marginRight: '0.5rem' }}
+                        >
+                          Archive
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTask(task.TASK_ID, task.TITLE)}
+                          className="btn btn-danger btn-xs"
+                          style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="3,6 5,6 21,6"/>
+                            <path d="M19,6v14a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6m3,0V4a2,2,0,0,1,2-2h4a2,2,0,0,1,2,2V6"/>
+                          </svg>
+                          Delete
+                        </button>
+                      </>
                     )}
                     
-                    {task.STATUS === 'pending' && (
-                      <button
-                        onClick={() => handleStatusUpdate(task.TASK_ID, 'in_progress')}
-                        className="btn btn-primary btn-xs"
-                        style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polygon points="5,3 19,12 5,21"/>
-                        </svg>
-                        Start
-                      </button>
-                    )}
+                    {/* Start button removed */}
                     
                     {task.STATUS === 'in_progress' && (
                       <button
@@ -805,7 +849,7 @@ const SectionUnitHeadTasks: React.FC = () => {
         </div>
       ) : (
         <div className="tasks-list">
-          {filteredTasks.map(task => (
+          {sortedTasks.map(task => (
             <div 
               key={task.TASK_ID} 
               className={`task-list-item ${isOverdue(task.DUE_DATE, task.STATUS) ? 'overdue' : ''}`}
@@ -846,24 +890,40 @@ const SectionUnitHeadTasks: React.FC = () => {
                   </button>
                   
                   {activeTab === 'assignedBy' && (
-                    <button
-                      onClick={() => handleDeleteTask(task.TASK_ID, task.TITLE)}
-                      className="btn btn-danger btn-xs"
-                      style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
-                    >
-                      Delete
-                    </button>
+                    <>
+                      <button
+                        onClick={async () => {
+                          const ok = await dialog.confirm({
+                            title: 'Archive Task',
+                            message: `Archive "${task.TITLE}"? It will be hidden from active lists for you and the assignee.`,
+                            type: 'warning',
+                            confirmText: 'Archive',
+                            cancelText: 'Cancel'
+                          });
+                          if (!ok) return;
+                          try {
+                            const resp = await apiService.archiveTask(task.TASK_ID);
+                            if (resp.success) {
+                              setAssignedTasks(prev => prev.filter(t => t.TASK_ID !== task.TASK_ID));
+                            }
+                          } catch (_) {}
+                        }}
+                        className="btn btn-secondary btn-xs"
+                        style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px', marginRight: '0.5rem' }}
+                      >
+                        Archive
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTask(task.TASK_ID, task.TITLE)}
+                        className="btn btn-danger btn-xs"
+                        style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
+                      >
+                        Delete
+                      </button>
+                    </>
                   )}
                   
-                  {task.STATUS === 'pending' && (
-                    <button
-                      onClick={() => handleStatusUpdate(task.TASK_ID, 'in_progress')}
-                      className="btn btn-primary btn-xs"
-                      style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
-                    >
-                      Start
-                    </button>
-                  )}
+                {/* Start button removed */}
                   
                   {task.STATUS === 'in_progress' && (
                     <button
@@ -922,43 +982,133 @@ const SectionUnitHeadTasks: React.FC = () => {
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="assignee">Assign to *</label>
-                  <select
-                    id="assignee"
-                    value={taskForm.assignedTo}
-                    onChange={(e) => setTaskForm(prev => ({ ...prev, assignedTo: parseInt(e.target.value) }))}
-                    required
-                  >
-                    <option value={0}>{isDivisionManager ? 'Select member...' : 'Select staff member...'}</option>
-                    {isDivisionManager ? (
-                      <>
-                        {heads.length > 0 && (
-                          <optgroup label="Section/Unit Heads">
-                            {heads.map(member => (
-                              <option key={`head-${member.USER_ID}`} value={member.USER_ID}>
-                                {member.NAME} ({member.ORGANIZATIONAL_ROLE || 'Section/Unit Head'})
-                              </option>
-                            ))}
-                          </optgroup>
+                  <label htmlFor="assignees">Assign to *</label>
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                    <div style={{ width: '100%', border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+                      <div style={{ padding: '6px 8px', background: '#f8fafc', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="11" cy="11" r="8"/>
+                          <path d="m21 21-4.35-4.35"/>
+                        </svg>
+                        <input
+                          type="text"
+                          placeholder="Search by name..."
+                          value={assigneeSearch}
+                          onChange={(e) => setAssigneeSearch(e.target.value)}
+                          style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent' }}
+                        />
+                        <div style={{ fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap' }}>{taskForm.assignedToIds.length} selected</div>
+                      </div>
+                      <div style={{ maxHeight: '260px', overflowY: 'auto', padding: '6px 8px' }}>
+                        {isDivisionManager ? (
+                          <>
+                            {filteredHeads.length > 0 && (
+                              <div style={{ marginBottom: '8px', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>Section/Unit Heads</div>
+                                  <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button type="button" className="btn btn-secondary btn-xs" onClick={() => selectVisible(filteredHeads.map(m => m.USER_ID))}>Select visible</button>
+                                    <button type="button" className="btn btn-secondary btn-xs" onClick={() => clearVisible(filteredHeads.map(m => m.USER_ID))}>Clear</button>
+                                  </div>
+                                </div>
+                                <div style={{ padding: '6px 8px' }}>
+                                  {filteredHeads.map(member => (
+                                    <div key={`head-${member.USER_ID}`} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 0' }}>
+                                      <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#334155' }}>
+                                        {(member.NAME || '?').split(' ').map(s => s[0]).slice(0,2).join('').toUpperCase()}
+                                      </div>
+                                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', justifyContent: 'flex-start' }}>
+                                        <input type="checkbox" checked={isSelected(member.USER_ID)} onChange={(e) => toggleId(member.USER_ID, e.target.checked)} />
+                                        <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
+                                          <span style={{ fontWeight: 600, color: '#0f172a' }}>{member.NAME}</span>
+                                          <span style={{ fontSize: '11px', color: '#64748b' }}>{member.ORGANIZATIONAL_ROLE || 'Section/Unit Head'}</span>
+                                        </div>
+                                      </label>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {filteredStaff.length > 0 && (
+                              <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>Staff</div>
+                                  <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button type="button" className="btn btn-secondary btn-xs" onClick={() => selectVisible(filteredStaff.map(m => m.USER_ID))}>Select visible</button>
+                                    <button type="button" className="btn btn-secondary btn-xs" onClick={() => clearVisible(filteredStaff.map(m => m.USER_ID))}>Clear</button>
+                                  </div>
+                                </div>
+                                <div style={{ padding: '6px 8px' }}>
+                                  {filteredStaff.map(member => (
+                                    <div key={`staff-${member.USER_ID}`} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 0' }}>
+                                      <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#334155' }}>
+                                        {(member.NAME || '?').split(' ').map(s => s[0]).slice(0,2).join('').toUpperCase()}
+                                      </div>
+                                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', justifyContent: 'flex-start' }}>
+                                        <input type="checkbox" checked={isSelected(member.USER_ID)} onChange={(e) => toggleId(member.USER_ID, e.target.checked)} />
+                                        <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
+                                          <span style={{ fontWeight: 600, color: '#0f172a' }}>{member.NAME}</span>
+                                          <span style={{ fontSize: '11px', color: '#64748b' }}>{member.ORGANIZATIONAL_ROLE || 'Staff'}</span>
+                                        </div>
+                                      </label>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>Staff</div>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button type="button" className="btn btn-secondary btn-xs" onClick={() => selectVisible(filteredStaff.map(m => m.USER_ID))}>Select visible</button>
+                                <button type="button" className="btn btn-secondary btn-xs" onClick={() => clearVisible(filteredStaff.map(m => m.USER_ID))}>Clear</button>
+                              </div>
+                            </div>
+                            <div style={{ padding: '6px 8px' }}>
+                              {filteredStaff.map(member => (
+                                <div key={member.USER_ID} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 0' }}>
+                                  <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#334155' }}>
+                                    {(member.NAME || '?').split(' ').map(s => s[0]).slice(0,2).join('').toUpperCase()}
+                                  </div>
+                                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', justifyContent: 'flex-start' }}>
+                                    <input type="checkbox" checked={isSelected(member.USER_ID)} onChange={(e) => toggleId(member.USER_ID, e.target.checked)} />
+                                    <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
+                                      <span style={{ fontWeight: 600, color: '#0f172a' }}>{member.NAME}</span>
+                                      <span style={{ fontSize: '11px', color: '#64748b' }}>{member.ORGANIZATIONAL_ROLE || 'Staff'}</span>
+                                    </div>
+                                  </label>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         )}
-                        {staff.length > 0 && (
-                          <optgroup label="Staff">
-                            {staff.map(member => (
-                              <option key={`staff-${member.USER_ID}`} value={member.USER_ID}>
-                                {member.NAME} ({member.ORGANIZATIONAL_ROLE || 'Staff'})
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </>
-                    ) : (
-                      staff.map(member => (
-                        <option key={member.USER_ID} value={member.USER_ID}>
-                          {member.NAME} ({member.ORGANIZATIONAL_ROLE})
-                        </option>
-                      ))
-                    )}
-                  </select>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-xs"
+                        onClick={() => {
+                          const allIds = (isDivisionManager ? filteredHeads.concat(filteredStaff) : filteredStaff).map(m => m.USER_ID);
+                          selectVisible(allIds);
+                        }}
+                      >
+                        Select all
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-xs"
+                        onClick={() => {
+                          const allIds = (isDivisionManager ? filteredHeads.concat(filteredStaff) : filteredStaff).map(m => m.USER_ID);
+                          clearVisible(allIds);
+                        }}
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="form-group">

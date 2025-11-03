@@ -1,56 +1,83 @@
 const { pool } = require('../config/database');
 
-// Create task assignment
+// Create task assignment (supports single or multiple assignees via assignedToIds)
 exports.createTask = async (req, res) => {
   try {
-    const { 
-      title, 
-      description, 
-      assignedTo, 
+    const {
+      title,
+      description,
+      assignedTo, // backward compatibility (single)
+      assignedToIds, // new (array)
       assignedBy,
-      dueDate, 
-      priority, 
-      category, 
-      tags, 
+      dueDate,
+      priority,
+      category,
+      tags,
       requiresDocument,
-      sectionId 
+      sectionId
     } = req.body;
 
-    // Validate required fields
-    if (!title || !description || !assignedTo || !dueDate || !priority || !assignedBy) {
+    // Validate required fields (excluding assignees which are normalized below)
+    if (!title || !description || !dueDate || !priority || !assignedBy) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: title, description, assignedTo, assignedBy, dueDate, priority'
+        error: 'Missing required fields: title, description, assignedBy, dueDate, priority'
       });
     }
 
-    // Insert task into TASK table (or document_requirement if TASK doesn't exist)
-    const [result] = await pool.query(
-      `INSERT INTO TASK (
-        TITLE, DESCRIPTION, ASSIGNED_TO, ASSIGNED_BY, DUE_DATE, 
-        PRIORITY, STATUS, CATEGORY, TAGS, REQUIRES_DOCUMENT, 
-        SECTION_ID, CREATED_AT
-      ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, NOW())`,
-      [
-        title, description, assignedTo, assignedBy, dueDate,
-        priority, category || null, tags || null, 
-        requiresDocument ? 1 : 0, sectionId || null
-      ]
-    );
+    // Normalize recipients
+    let recipients = [];
+    if (Array.isArray(assignedToIds) && assignedToIds.length > 0) {
+      recipients = assignedToIds
+        .map(id => parseInt(id, 10))
+        .filter(id => Number.isFinite(id));
+    } else if (assignedTo !== undefined && assignedTo !== null) {
+      const single = parseInt(assignedTo, 10);
+      if (Number.isFinite(single)) recipients = [single];
+    }
 
-    // Create notification for assigned user
-    await pool.query(
-      `INSERT INTO SYSTEM_NOTIFICATION (
-        USER_ID, TYPE, TITLE, MESSAGE, ACTION_URL, 
-        RELATED_TASK_ID, IS_READ, CREATED_AT
-      ) VALUES (?, 'task_assigned', 'New Task Assigned', ?, '/staff/tasks', ?, 0, NOW())`,
-      [assignedTo, `You have been assigned a new task: ${title}`, result.insertId]
-    );
+    if (recipients.length === 0) {
+      return res.status(400).json({ success: false, error: 'No assignees provided' });
+    }
+
+    const createdTaskIds = [];
+
+    for (const userId of recipients) {
+      const [result] = await pool.query(
+        `INSERT INTO TASK (
+          TITLE, DESCRIPTION, ASSIGNED_TO, ASSIGNED_BY, DUE_DATE,
+          PRIORITY, STATUS, CATEGORY, TAGS, REQUIRES_DOCUMENT,
+          SECTION_ID, CREATED_AT
+        ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, NOW())`,
+        [
+          title,
+          description,
+          userId,
+          assignedBy,
+          dueDate,
+          priority,
+          category || null,
+          tags || null,
+          requiresDocument ? 1 : 0,
+          sectionId || null
+        ]
+      );
+
+      createdTaskIds.push(result.insertId);
+
+      await pool.query(
+        `INSERT INTO SYSTEM_NOTIFICATION (
+          USER_ID, TYPE, TITLE, MESSAGE, ACTION_URL,
+          RELATED_TASK_ID, IS_READ, CREATED_AT
+        ) VALUES (?, 'task_assigned', 'New Task Assigned', ?, '/staff/tasks', ?, 0, NOW())`,
+        [userId, `You have been assigned a new task: ${title}`, result.insertId]
+      );
+    }
 
     res.json({
       success: true,
-      message: 'Task created successfully',
-      data: { TASK_ID: result.insertId }
+      message: recipients.length > 1 ? 'Tasks created successfully' : 'Task created successfully',
+      data: recipients.length > 1 ? { TASK_IDS: createdTaskIds } : { TASK_ID: createdTaskIds[0] }
     });
   } catch (error) {
     console.error('Create task error:', error);
@@ -99,9 +126,13 @@ exports.getTasksAssignedTo = async (req, res) => {
       LEFT JOIN document d ON t.LINKED_DOCUMENT_ID = d.DOCUMENT_ID
       LEFT JOIN user doc_creator ON d.CREATED_BY = doc_creator.USER_ID
       WHERE t.ASSIGNED_TO = ?
+        AND NOT EXISTS (
+          SELECT 1 FROM archive a
+          WHERE a.TASK_ID = t.TASK_ID AND a.VIEWER_USER_ID = ? AND a.CONTEXT = 'assigned_to'
+        )
     `;
 
-    const params = [userId];
+    const params = [userId, userId];
 
     // Add status filter
     if (status && status !== 'all') {
@@ -200,9 +231,13 @@ exports.getTasksAssignedBy = async (req, res) => {
       LEFT JOIN document d ON t.LINKED_DOCUMENT_ID = d.DOCUMENT_ID
       LEFT JOIN user doc_creator ON d.CREATED_BY = doc_creator.USER_ID
       WHERE t.ASSIGNED_BY = ?
+        AND NOT EXISTS (
+          SELECT 1 FROM archive a
+          WHERE a.TASK_ID = t.TASK_ID AND a.VIEWER_USER_ID = ? AND a.CONTEXT = 'assigned_by'
+        )
     `;
 
-    const params = [userId];
+    const params = [userId, userId];
 
     if (status && status !== 'all') {
       query += ' AND t.STATUS = ?';
@@ -1558,3 +1593,90 @@ async function notifyRegionalDirectorsForReview(task, documents, remarks) {
     console.error('Notify regional directors error:', error);
   }
 }
+
+// Archive a task (assigner only) - hides for both assigner and assignee
+exports.archiveTask = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const userId = req.user.userId;
+
+    // Validate assigner and get assignee
+    const [rows] = await pool.query('SELECT ASSIGNED_TO FROM TASK WHERE TASK_ID = ? AND ASSIGNED_BY = ?', [taskId, userId]);
+    if (rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'Only the assigner can archive this task' });
+    }
+    const assigneeId = rows[0].ASSIGNED_TO;
+
+    // Insert two archive rows (assigner view and assignee view)
+    const now = new Date();
+    await pool.query(
+      `INSERT INTO archive (TASK_ID, VIEWER_USER_ID, CONTEXT, ARCHIVED_BY, DATE_ARCHIVED)
+       VALUES (?, ?, 'assigned_by', ?, ?)
+       ON DUPLICATE KEY UPDATE DATE_ARCHIVED = VALUES(DATE_ARCHIVED)`,
+      [taskId, userId, userId, now]
+    );
+
+    await pool.query(
+      `INSERT INTO archive (TASK_ID, VIEWER_USER_ID, CONTEXT, ARCHIVED_BY, DATE_ARCHIVED)
+       VALUES (?, ?, 'assigned_to', ?, ?)
+       ON DUPLICATE KEY UPDATE DATE_ARCHIVED = VALUES(DATE_ARCHIVED)`,
+      [taskId, assigneeId, userId, now]
+    );
+
+    res.json({ success: true, message: 'Task archived' });
+  } catch (error) {
+    console.error('Archive task error:', error);
+    res.status(500).json({ success: false, error: 'Failed to archive task' });
+  }
+};
+
+// Unarchive a task (assigner only) - restores for both
+exports.unarchiveTask = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const userId = req.user.userId;
+
+    // Validate assigner and get assignee
+    const [rows] = await pool.query('SELECT ASSIGNED_TO FROM TASK WHERE TASK_ID = ? AND ASSIGNED_BY = ?', [taskId, userId]);
+    if (rows.length === 0) {
+      return res.status(403).json({ success: false, error: 'Only the assigner can unarchive this task' });
+    }
+    const assigneeId = rows[0].ASSIGNED_TO;
+
+    await pool.query(
+      `DELETE FROM archive WHERE TASK_ID = ? AND ( (VIEWER_USER_ID = ? AND CONTEXT = 'assigned_by') OR (VIEWER_USER_ID = ? AND CONTEXT = 'assigned_to') )`,
+      [taskId, userId, assigneeId]
+    );
+
+    res.json({ success: true, message: 'Task unarchived' });
+  } catch (error) {
+    console.error('Unarchive task error:', error);
+    res.status(500).json({ success: false, error: 'Failed to unarchive task' });
+  }
+};
+
+// List archived tasks for current user by context
+exports.listArchivedTasks = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { context } = req.query; // 'assigned_by' | 'assigned_to'
+
+    if (!['assigned_by', 'assigned_to'].includes(context)) {
+      return res.status(400).json({ success: false, error: 'Invalid context' });
+    }
+
+    const [rows] = await pool.query(
+      `SELECT t.*, a.DATE_ARCHIVED
+       FROM TASK t
+       JOIN archive a ON a.TASK_ID = t.TASK_ID
+       WHERE a.VIEWER_USER_ID = ? AND a.CONTEXT = ?
+       ORDER BY a.DATE_ARCHIVED DESC`,
+      [userId, context]
+    );
+
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('List archived tasks error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch archived tasks' });
+  }
+};

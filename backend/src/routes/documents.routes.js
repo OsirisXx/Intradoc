@@ -29,6 +29,12 @@ router.post('/:documentId/approve-forwarded', documentsController.approveForward
 // Document download
 router.get('/download/:documentId', documentsController.downloadDocument);
 
+// Per-viewer document archive for reports
+router.post('/:documentId/archive', documentsController.archiveDocumentForViewer);
+router.delete('/:documentId/archive', documentsController.unarchiveDocumentForViewer);
+router.post('/bulk-archive', documentsController.bulkArchiveDocumentsForViewer);
+router.get('/archive/list', documentsController.listArchivedDocumentsForViewer);
+
 // Legacy endpoint (keep for backward compatibility)
 router.post('/status', documentsController.updateDocumentStatus);
 

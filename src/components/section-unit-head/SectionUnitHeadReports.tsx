@@ -4,9 +4,11 @@ import { useSearchParams } from 'react-router-dom'
 import { apiService } from '../../services/api'
 import * as Types from '../../types'
 import './SectionUnitHead.css'
+import { useDialogContext } from '../ui/DialogProvider'
 
 export function SectionUnitHeadReports() {
   const { user } = useAuth()
+  const dialog = useDialogContext()
   const [searchParams, setSearchParams] = useSearchParams()
   const [documents, setDocuments] = useState<Types.DocumentWithDetails[]>([])
   const [loading, setLoading] = useState(true)
@@ -17,6 +19,8 @@ export function SectionUnitHeadReports() {
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card')
+  const [multiSelect, setMultiSelect] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [sortBy, setSortBy] = useState<'date' | 'title' | 'status'>('date')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
@@ -543,6 +547,40 @@ export function SectionUnitHeadReports() {
                   </svg>
                 </button>
               </div>
+
+              {user?.FUNCTIONAL_ROLE === 'regional_director' && (
+                <div className="bulk-actions" style={{ marginLeft: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    className={`btn ${multiSelect ? 'btn-secondary' : 'btn-outline'}`}
+                    onClick={() => { setMultiSelect(v => !v); setSelectedIds([]); }}
+                  >
+                    {multiSelect ? 'Cancel Select' : 'Multi-select'}
+                  </button>
+                  {multiSelect && selectedIds.length > 0 && (
+                    <button
+                      className="btn btn-danger"
+                      onClick={async () => {
+                        const ok = await dialog.confirm({
+                          title: 'Bulk Archive',
+                          message: `Archive ${selectedIds.length} selected report(s) from your view?`,
+                          type: 'warning',
+                          confirmText: 'Archive',
+                          cancelText: 'Cancel'
+                        })
+                        if (!ok) return
+                        const resp = await apiService.bulkArchiveDocuments(selectedIds)
+                        if (resp.success) {
+                          setSelectedIds([])
+                          setMultiSelect(false)
+                          await loadDocuments()
+                        }
+                      }}
+                    >
+                      Bulk Archive
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -585,6 +623,17 @@ export function SectionUnitHeadReports() {
         <div className="documents-grid">
           {filteredAndSortedDocuments.map(doc => (
             <div key={doc.DOCUMENT_ID} className={`document-card ${(doc as any).DOCUMENT_TYPE === 'forwarded' ? 'forwarded-document' : ''}`}>
+              {multiSelect && (
+                <div style={{ position:'absolute', top:8, left:8 }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(doc.DOCUMENT_ID)}
+                    onChange={(e) => {
+                      setSelectedIds(prev => e.target.checked ? [...prev, doc.DOCUMENT_ID] : prev.filter(id => id !== doc.DOCUMENT_ID))
+                    }}
+                  />
+                </div>
+              )}
               {(doc as any).DOCUMENT_TYPE === 'forwarded' && (
                 <div className="forwarded-badge">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -670,6 +719,28 @@ export function SectionUnitHeadReports() {
                   </svg>
                   {user?.FUNCTIONAL_ROLE === 'regional_director' ? 'Review' : 'Give Feedback'}
                 </button>
+
+                {user?.FUNCTIONAL_ROLE === 'regional_director' && (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={async () => {
+                      const ok = await dialog.confirm({
+                        title: 'Archive Report',
+                        message: `Archive "${doc.TITLE}" from your reports?`,
+                        type: 'warning',
+                        confirmText: 'Archive',
+                        cancelText: 'Cancel'
+                      })
+                      if (!ok) return
+                      const resp = await apiService.archiveDocument(doc.DOCUMENT_ID)
+                      if (resp.success) {
+                        await loadDocuments()
+                      }
+                    }}
+                  >
+                    Archive
+                  </button>
+                )}
                 
                 {(doc as any).FILE_PATH && (
                   <button 
@@ -708,6 +779,17 @@ export function SectionUnitHeadReports() {
         <div className="documents-list">
           {filteredAndSortedDocuments.map(doc => (
             <div key={doc.DOCUMENT_ID} className={`document-list-item ${(doc as any).DOCUMENT_TYPE === 'forwarded' ? 'forwarded-document' : ''}`}>
+              {multiSelect && (
+                <div style={{ marginRight: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(doc.DOCUMENT_ID)}
+                    onChange={(e) => {
+                      setSelectedIds(prev => e.target.checked ? [...prev, doc.DOCUMENT_ID] : prev.filter(id => id !== doc.DOCUMENT_ID))
+                    }}
+                  />
+                </div>
+              )}
               {(doc as any).DOCUMENT_TYPE === 'forwarded' && (
                 <div className="forwarded-indicator">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -782,6 +864,27 @@ export function SectionUnitHeadReports() {
                   >
                     Review
                   </button>
+                  {user?.FUNCTIONAL_ROLE === 'regional_director' && (
+                    <button
+                      className="btn btn-secondary btn-xs"
+                      onClick={async () => {
+                        const ok = await dialog.confirm({
+                          title: 'Archive Report',
+                          message: `Archive "${doc.TITLE}" from your reports?`,
+                          type: 'warning',
+                          confirmText: 'Archive',
+                          cancelText: 'Cancel'
+                        })
+                        if (!ok) return
+                        const resp = await apiService.archiveDocument(doc.DOCUMENT_ID)
+                        if (resp.success) {
+                          await loadDocuments()
+                        }
+                      }}
+                    >
+                      Archive
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

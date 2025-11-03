@@ -32,6 +32,7 @@ import SectionUnitHeadFeedback from './components/section-unit-head/SectionUnitH
 import { SectionUnitHeadPosts } from './components/section-unit-head/SectionUnitHeadPosts'
 import { SectionUnitHeadDocumentWorks } from './components/section-unit-head/SectionUnitHeadDocumentWorks'
 import SectionUnitHeadTaskDetail from './components/section-unit-head/SectionUnitHeadTaskDetail.tsx'
+import ArchivePage from './components/common/ArchivePage'
 
 // Division Manager components
 import { DivisionManagerTaskAssignment } from './components/division-manager/DivisionManagerTaskAssignment'
@@ -92,6 +93,7 @@ function App() {
                       <Route path="/work/:taskId" element={<StaffTaskDetail />} />
                       <Route path="/tasks" element={<StaffTasks />} />
                       <Route path="/notifications" element={<StaffNotifications />} />
+                      <Route path="/archive" element={<ArchivePage />} />
                       <Route path="/feedback" element={<StaffFeedback />} />
                       <Route path="/settings" element={<StaffSettings />} />
                     </Routes>
@@ -118,6 +120,7 @@ function App() {
                       <Route path="/feedback" element={<SectionUnitHeadFeedback />} />
                       <Route path="/reports" element={<SectionUnitHeadReports />} />
                       <Route path="/posts" element={<SectionUnitHeadPosts />} />
+                      <Route path="/archive" element={<ArchivePage />} />
                       <Route path="/settings" element={<StaffSettings />} />
                     </Routes>
                   </div>
@@ -146,6 +149,7 @@ function App() {
                       <Route path="/tasks" element={<div className="page"><h1>Tasks</h1><p>Coming soon...</p></div>} />
                       <Route path="/notifications" element={<DivisionManagerNotifications />} />
                       <Route path="/feedback" element={<DivisionManagerFeedback />} />
+                      <Route path="/archive" element={<ArchivePage />} />
                       <Route path="/settings" element={<StaffSettings />} />
                     </Routes>
                   </div>
@@ -166,6 +170,7 @@ function App() {
                       <Route path="/" element={<DivisionManagerDashboard />} />
                       <Route path="/reports" element={<SectionUnitHeadReports />} />
                       <Route path="/notifications" element={<DivisionManagerNotifications />} />
+                      <Route path="/archive" element={<ArchivePage />} />
                       <Route path="/settings" element={<StaffSettings />} />
                     </Routes>
                   </div>

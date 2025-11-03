@@ -10,6 +10,10 @@ router.use(authenticate);
 router.post('/', tasksController.createTask);
 router.get('/assigned-to/:userId', tasksController.getTasksAssignedTo);
 router.get('/assigned-by/:userId', tasksController.getTasksAssignedBy);
+// Archive endpoints
+router.post('/:taskId/archive', tasksController.archiveTask);
+router.delete('/:taskId/archive', tasksController.unarchiveTask);
+router.get('/archive/list', tasksController.listArchivedTasks);
 router.put('/:taskId/status', tasksController.updateTaskStatus);
 router.put('/:taskId/complete', tasksController.completeTask);
 // Submission workflow

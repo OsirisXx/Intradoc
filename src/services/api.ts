@@ -318,6 +318,36 @@ class ApiService {
     }
   }
 
+  async archiveTask(taskId: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.post(`/tasks/${taskId}/archive`, {});
+      return response;
+    } catch (error) {
+      console.error('Error archiving task:', error);
+      return { success: false, error: 'Failed to archive task' } as any;
+    }
+  }
+
+  async unarchiveTask(taskId: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.delete(`/tasks/${taskId}/archive`);
+      return response;
+    } catch (error) {
+      console.error('Error unarchiving task:', error);
+      return { success: false, error: 'Failed to unarchive task' } as any;
+    }
+  }
+
+  async getArchivedTasks(context: 'assigned_by' | 'assigned_to'): Promise<ApiResponse<TaskWithDetails[]>> {
+    try {
+      const response = await apiClient.get(`/tasks/archive/list?context=${context}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching archived tasks:', error);
+      return { success: false, error: 'Failed to fetch archived tasks' };
+    }
+  }
+
   async getAllTasksForOversight(): Promise<ApiResponse<TaskWithDetails[]>> {
     try {
       const response = await apiClient.get('/tasks/all-tasks');
@@ -419,6 +449,46 @@ class ApiService {
     } catch (error) {
       console.error('Error fetching documents by section:', error);
       return { success: false, error: 'Failed to fetch documents' };
+    }
+  }
+
+  async archiveDocument(documentId: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.post(`/documents/${documentId}/archive`, {});
+      return response as any;
+    } catch (error) {
+      console.error('Error archiving document:', error);
+      return { success: false, error: 'Failed to archive document' } as any;
+    }
+  }
+
+  async unarchiveDocument(documentId: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.delete(`/documents/${documentId}/archive`);
+      return response as any;
+    } catch (error) {
+      console.error('Error unarchiving document:', error);
+      return { success: false, error: 'Failed to unarchive document' } as any;
+    }
+  }
+
+  async bulkArchiveDocuments(documentIds: number[]): Promise<ApiResponse<void>> {
+    try {
+      const response = await apiClient.post(`/documents/bulk-archive`, { documentIds });
+      return response as any;
+    } catch (error) {
+      console.error('Error bulk archiving documents:', error);
+      return { success: false, error: 'Failed to bulk archive documents' } as any;
+    }
+  }
+
+  async getArchivedDocuments(): Promise<ApiResponse<DocumentWithDetails[]>> {
+    try {
+      const response = await apiClient.get(`/documents/archive/list`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching archived documents:', error);
+      return { success: false, error: 'Failed to fetch archived documents' };
     }
   }
 

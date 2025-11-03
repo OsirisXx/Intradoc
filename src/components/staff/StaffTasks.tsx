@@ -182,6 +182,18 @@ export function StaffTasks() {
     return matchesStatus && matchesPriority && matchesSearch && matchesSubmission
   })
 
+  // Sort: overdue first, then in_progress, pending, completed last; within group sort by due date asc
+  const statusRank: Record<string, number> = { pending: 2, in_progress: 1, completed: 4, cancelled: 5 }
+  const sortedTasks = [...filteredTasks].sort((a, b) => {
+    const aOverdue = isOverdue(a.DUE_DATE, a.STATUS)
+    const bOverdue = isOverdue(b.DUE_DATE, b.STATUS)
+    if (aOverdue !== bOverdue) return aOverdue ? -1 : 1
+    const rankA = statusRank[a.STATUS] ?? 3
+    const rankB = statusRank[b.STATUS] ?? 3
+    if (rankA !== rankB) return rankA - rankB
+    return new Date(a.DUE_DATE).getTime() - new Date(b.DUE_DATE).getTime()
+  })
+
   // Task summary statistics
   const taskSummary = {
     total: tasks.length,
@@ -403,7 +415,7 @@ export function StaffTasks() {
         </div>
       )}
 
-      {filteredTasks.length === 0 ? (
+      {sortedTasks.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">
             <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -421,7 +433,7 @@ export function StaffTasks() {
         </div>
       ) : viewMode === 'card' ? (
         <div className="tasks-grid">
-          {filteredTasks.map(task => (
+          {sortedTasks.map(task => (
             <div 
               key={task.TASK_ID} 
               className={`task-card ${isOverdue(task.DUE_DATE, task.STATUS) ? 'overdue' : ''}`}
@@ -514,18 +526,7 @@ export function StaffTasks() {
                       View Submission
                     </button>
                     
-                    {task.STATUS === 'pending' && (
-                      <button
-                        onClick={() => handleTaskStatusUpdate(task.TASK_ID, 'in_progress')}
-                        className="btn btn-primary btn-xs"
-                        style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polygon points="5,3 19,12 5,21"/>
-                        </svg>
-                        Start
-                      </button>
-                    )}
+                    {/* Start button removed */}
                     
                     {task.STATUS === 'in_progress' && (
                       <button
@@ -555,8 +556,8 @@ export function StaffTasks() {
           ))}
         </div>
         ) : (
-          <div className="tasks-list">
-            {filteredTasks.map(task => (
+        <div className="tasks-list">
+          {sortedTasks.map(task => (
               <div 
                 key={task.TASK_ID} 
                 className={`task-list-item ${isOverdue(task.DUE_DATE, task.STATUS) ? 'overdue' : ''}`}
@@ -592,15 +593,7 @@ export function StaffTasks() {
                       View Submission
                     </button>
                     
-                    {task.STATUS === 'pending' && (
-                      <button
-                        onClick={() => handleTaskStatusUpdate(task.TASK_ID, 'in_progress')}
-                        className="btn btn-primary btn-xs"
-                        style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '28px', minHeight: '28px' }}
-                      >
-                        Start
-                      </button>
-                    )}
+                    {/* Start button removed */}
                     
                     {task.STATUS === 'in_progress' && (
                       <button
