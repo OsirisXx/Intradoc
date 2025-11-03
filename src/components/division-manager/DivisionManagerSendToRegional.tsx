@@ -33,12 +33,7 @@ export function DivisionManagerSendToRegional() {
     load()
   }, [user])
 
-  const getTypeIcon = (categoryName?: string) => {
-    const key = (categoryName || '').toLowerCase()
-    if (key.includes('report')) return '📊'
-    if (key.includes('task')) return '✅'
-    if (key.includes('proposal')) return '📋'
-    if (key.includes('budget')) return '💰'
+  const getTypeIcon = () => {
     return '📄'
   }
 
@@ -155,7 +150,7 @@ export function DivisionManagerSendToRegional() {
                       onClick={() => handleDocumentSelect(doc.DOCUMENT_ID)}
                     >
                       <div className="document-header">
-                        <div className="document-icon">{getTypeIcon((doc.category as any)?.CATEGORY_NAME)}</div>
+                        <div className="document-icon">{getTypeIcon()}</div>
                         <div className="document-title-section">
                           <h4>{doc.TITLE}</h4>
                           <span className="document-creator">By: {(doc as any).CREATED_BY_NAME || doc.createdByUser?.NAME || 'Unknown'}</span>
@@ -215,7 +210,7 @@ export function DivisionManagerSendToRegional() {
                     title="Already forwarded to Regional Director"
                   >
                     <div className="document-header">
-                      <div className="document-icon">{getTypeIcon((doc.category as any)?.CATEGORY_NAME)}</div>
+                      <div className="document-icon">{getTypeIcon()}</div>
                       <div className="document-title-section">
                         <h4>{doc.TITLE}</h4>
                         <span className="document-creator">By: {(doc as any).CREATED_BY_NAME || doc.createdByUser?.NAME || 'Unknown'}</span>

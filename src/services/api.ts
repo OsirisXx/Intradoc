@@ -4,7 +4,6 @@ import { apiClient } from './apiClient';
 // Type aliases for cleaner code
 type Document = Types.Document;
 type DocumentWithDetails = Types.DocumentWithDetails;
-type DocumentCategory = Types.DocumentCategory;
 type DocumentApproval = Types.DocumentApproval;
 type DocumentApprovalWithDetails = Types.DocumentApprovalWithDetails;
 type User = Types.User;
@@ -55,14 +54,12 @@ class ApiService {
       DESCRIPTION: 'Quarterly budget analysis and projections',
       FILE_LINK: 'https://drive.google.com/file/d/1abc123/view',
       FINGERPRINT_HASH: 'a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456',
-      CATEGORY_ID: 1,
       SECTION_ID: 1,
       ASSIGNED_TO: 2,
       CREATED_BY: 1,
       CREATED_AT: '2024-03-25T10:00:00Z',
       FREQUENCY: 'Quarterly',
       TAGS: 'budget, quarterly, finance',
-      category: { CATEGORY_ID: 1, NAME: 'Financial Reports', DESCRIPTION: 'Financial documents and reports' },
       section: { SECTION_ID: 1, NAME: 'Finance', DIVISION_ID: 1 },
       assignedUser: { USER_ID: 2, NAME: 'John Smith', ID_NUMBER: 'EMP001', EMAIL: 'john@company.com', PASSWORD: '', SECTION_ID: 1, FUNCTIONAL_ROLE: 'staff', ORGANIZATIONAL_ROLE: 'Engineering', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
       createdByUser: { USER_ID: 1, NAME: 'Admin User', ID_NUMBER: 'ADM001', EMAIL: 'admin@company.com', PASSWORD: '', SECTION_ID: 5, FUNCTIONAL_ROLE: 'admin', ORGANIZATIONAL_ROLE: 'IT', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
@@ -74,28 +71,17 @@ class ApiService {
       DESCRIPTION: 'Updated safety protocols and procedures',
       FILE_LINK: 'https://drive.google.com/file/d/2def456/view',
       FINGERPRINT_HASH: 'd4e5f6g7h8i9012345678901234567890abcdef1234567890abcdef123456',
-      CATEGORY_ID: 2,
       SECTION_ID: 2,
       ASSIGNED_TO: 3,
       CREATED_BY: 1,
       CREATED_AT: '2024-03-20T14:30:00Z',
       FREQUENCY: 'Annually',
       TAGS: 'safety, protocols, guidelines',
-      category: { CATEGORY_ID: 2, NAME: 'Safety Protocols', DESCRIPTION: 'Safety and security documentation' },
       section: { SECTION_ID: 2, NAME: 'Operations', DIVISION_ID: 1 },
       assignedUser: { USER_ID: 3, NAME: 'Sarah Johnson', ID_NUMBER: 'EMP002', EMAIL: 'sarah@company.com', PASSWORD: '', SECTION_ID: 2, FUNCTIONAL_ROLE: 'staff', ORGANIZATIONAL_ROLE: 'Operations', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
       createdByUser: { USER_ID: 1, NAME: 'Admin User', ID_NUMBER: 'ADM001', EMAIL: 'admin@company.com', PASSWORD: '', SECTION_ID: 5, FUNCTIONAL_ROLE: 'admin', ORGANIZATIONAL_ROLE: 'IT', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
       currentStatus: { STATUS_ID: 2, DOCUMENT_ID: 2, STATUS: 'Approved', CREATED_AT: '2024-03-22T09:15:00Z' }
     }
-  ];
-
-  private categories: DocumentCategory[] = [
-    { CATEGORY_ID: 1, NAME: 'Financial Reports', DESCRIPTION: 'Financial documents and reports' },
-    { CATEGORY_ID: 2, NAME: 'Safety Protocols', DESCRIPTION: 'Safety and security documentation' },
-    { CATEGORY_ID: 3, NAME: 'HR Documentation', DESCRIPTION: 'Human resources policies and procedures' },
-    { CATEGORY_ID: 4, NAME: 'IT Documentation', DESCRIPTION: 'Information technology documentation' },
-    { CATEGORY_ID: 5, NAME: 'Compliance Reports', DESCRIPTION: 'Regulatory compliance documentation' },
-    { CATEGORY_ID: 6, NAME: 'Policy Documents', DESCRIPTION: 'Organizational policies and procedures' }
   ];
 
   private sections: Section[] = [
@@ -242,14 +228,6 @@ class ApiService {
       console.error('Error uploading document with file:', error);
       return { success: false, error: 'Failed to upload document file' };
     }
-  }
-
-  async getCategories(): Promise<ApiResponse<DocumentCategory[]>> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({ success: true, data: this.categories });
-      }, 200);
-    });
   }
 
   async getSections(): Promise<ApiResponse<Section[]>> {

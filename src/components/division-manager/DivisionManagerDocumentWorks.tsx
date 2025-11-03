@@ -72,7 +72,6 @@ export function DivisionManagerDocumentWorks() {
         formData.append('file', selectedFile)
         formData.append('title', selectedFile.name)
         formData.append('description', description || `Document for task: ${selectedTask.TITLE}`)
-        formData.append('categoryId', '1')
         formData.append('requiresApproval', 'true')
         formData.append('uploadedBy', user.USER_ID.toString())
         formData.append('sectionId', (user.SECTION_ID || 0).toString())

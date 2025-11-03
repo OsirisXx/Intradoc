@@ -16,7 +16,6 @@ export function SectionUnitHeadReports() {
   
   // Filters and view modes
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'revision_required'>('all')
-  const [categoryFilter, setCategoryFilter] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card')
   const [multiSelect, setMultiSelect] = useState(false)
@@ -247,13 +246,12 @@ export function SectionUnitHeadReports() {
   const filteredAndSortedDocuments = documents
     .filter(doc => {
       const matchesStatus = filter === 'all' || ((doc as any).CURRENT_STATUS || (doc as any).STATUS) === filter
-      const matchesCategory = categoryFilter === 'all' || (doc.category as any)?.CATEGORY_NAME === categoryFilter
       const matchesSearch = searchTerm === '' || 
         doc.TITLE.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (doc.DESCRIPTION || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         ((doc as any).CREATED_BY_NAME || doc.createdByUser?.NAME || '').toLowerCase().includes(searchTerm.toLowerCase())
       
-      return matchesStatus && matchesCategory && matchesSearch
+      return matchesStatus && matchesSearch
     })
     .sort((a, b) => {
       let aValue: any, bValue: any
@@ -281,9 +279,6 @@ export function SectionUnitHeadReports() {
       }
     })
 
-  // Get unique categories for filter
-  const categories = Array.from(new Set(documents.map(doc => (doc.category as any)?.CATEGORY_NAME).filter(Boolean)))
-
   // Document summary
   const documentSummary = {
     total: documents.length,
@@ -294,19 +289,9 @@ export function SectionUnitHeadReports() {
     forwarded: documents.filter(d => (d as any).DOCUMENT_TYPE === 'forwarded').length,
   }
 
-  const getTypeIcon = (categoryName?: string) => {
-    switch (categoryName?.toLowerCase()) {
-      case 'financial reports': return '💰'
-      case 'safety protocols': return '🛡️'
-      case 'project updates': return '📊'
-      case 'incident reports': return '⚠️'
-      case 'training materials': return '📚'
-      case 'policy documents': return '📋'
-      case 'hr documentation': return '👥'
-      case 'it documentation': return '💻'
-      case 'compliance reports': return '📋'
-      default: return '📄'
-    }
+  const getTypeIcon = () => {
+    // Default document icon
+    return '📄'
   }
 
   if (loading) {
@@ -469,23 +454,6 @@ export function SectionUnitHeadReports() {
                   <option value="approved">Approved</option>
                   <option value="rejected">Rejected</option>
                   <option value="revision_required">Revision Required</option>
-                </select>
-              </div>
-
-              <div className="filter-group">
-                <label htmlFor="category-filter">Category</label>
-                <select
-                  id="category-filter"
-                  value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="filter-select"
-                >
-                  <option value="all">All Categories</option>
-                  {categories.map(category => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
                 </select>
               </div>
 
@@ -655,7 +623,7 @@ export function SectionUnitHeadReports() {
               )}
               <div className="document-header">
                 <div className="document-icon">
-                  {getTypeIcon((doc.category as any)?.CATEGORY_NAME)}
+                  {getTypeIcon()}
                 </div>
                 <div className="document-badges">
                   {getStatusBadge((doc as any).CURRENT_STATUS || (doc as any).STATUS)}
@@ -681,16 +649,6 @@ export function SectionUnitHeadReports() {
                     </svg>
                     <span>{formatDate(doc.CREATED_AT)}</span>
                   </div>
-                  {doc.category && (
-                    <div className="meta-item">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M3 21h18"/>
-                        <path d="M5 21V7l8-4v18"/>
-                        <path d="M19 21V11l-6-4"/>
-                      </svg>
-                      <span>{(doc.category as any).CATEGORY_NAME}</span>
-                    </div>
-                  )}
                   {(doc as any).FILE_SIZE && (
                     <div className="meta-item">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -820,12 +778,6 @@ export function SectionUnitHeadReports() {
                     <span>{(doc as any).CREATED_BY_NAME || doc.createdByUser?.NAME || 'Unknown'}</span>
                     <span>•</span>
                     <span>{formatDate(doc.CREATED_AT)}</span>
-                    {doc.category && (
-                      <>
-                        <span>•</span>
-                        <span>{(doc.category as any).CATEGORY_NAME}</span>
-                      </>
-                    )}
                     {(doc as any).FILE_SIZE && (
                       <>
                         <span>•</span>
@@ -929,12 +881,6 @@ export function SectionUnitHeadReports() {
                   <div className="form-group" style={{ marginTop:0 }}>
                     <label>Forwarded by</label>
                     <div>{(selectedDocument as any).FORWARDED_BY_NAME}</div>
-                  </div>
-                )}
-                {selectedDocument.category && (
-                  <div className="form-group" style={{ gridColumn:'1 / -1', marginTop:0 }}>
-                    <label>Category</label>
-                    <div>{(selectedDocument.category as any).CATEGORY_NAME}</div>
                   </div>
                 )}
               </div>

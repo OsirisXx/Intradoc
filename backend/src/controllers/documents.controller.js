@@ -46,12 +46,10 @@ exports.getDocuments = async (req, res) => {
 
     let query = `
       SELECT d.*, 
-             dc.NAME as CATEGORY_NAME,
              s.NAME as SECTION_NAME,
              creator.NAME as CREATED_BY_NAME,
              ds.STATUS as CURRENT_STATUS
       FROM document d
-      LEFT JOIN document_category dc ON d.CATEGORY_ID = dc.CATEGORY_ID
       LEFT JOIN section s ON d.SECTION_ID = s.SECTION_ID
       LEFT JOIN user creator ON d.CREATED_BY = creator.USER_ID
       LEFT JOIN (
@@ -169,14 +167,12 @@ exports.listArchivedDocumentsForViewer = async (req, res) => {
     const userId = req.user.userId;
     const [rows] = await pool.query(
       `SELECT d.*, 
-              dc.NAME as CATEGORY_NAME,
               s.NAME as SECTION_NAME,
               creator.NAME as CREATED_BY_NAME,
               ds.STATUS as CURRENT_STATUS,
               a.DATE_ARCHIVED
        FROM archive a
        JOIN document d ON d.DOCUMENT_ID = a.DOCUMENT_ID
-       LEFT JOIN document_category dc ON d.CATEGORY_ID = dc.CATEGORY_ID
        LEFT JOIN section s ON d.SECTION_ID = s.SECTION_ID
        LEFT JOIN user creator ON d.CREATED_BY = creator.USER_ID
        LEFT JOIN (
@@ -202,7 +198,7 @@ exports.listArchivedDocumentsForViewer = async (req, res) => {
 // Upload new document
 exports.uploadDocument = [upload.single('file'), async (req, res) => {
   try {
-    const { title, description, category, tags, uploadedBy, sectionId, fulfillsTaskId, documentUrl } = req.body;
+    const { title, description, tags, uploadedBy, sectionId, fulfillsTaskId, documentUrl } = req.body;
     const file = req.file;
 
     // Check if either file or URL is provided
@@ -223,17 +219,14 @@ exports.uploadDocument = [upload.single('file'), async (req, res) => {
       fileLink = documentUrl;
     }
 
-    // If no category is provided, use a default category ID (1)
-    const categoryId = category && category !== '' ? category : 1;
-
     // Insert document
     const [result] = await pool.query(
       `INSERT INTO document (
         TITLE, DESCRIPTION, FILE_LINK, FINGERPRINT_HASH, 
-        CATEGORY_ID, SECTION_ID, CREATED_BY, ASSIGNED_TO,
+        SECTION_ID, CREATED_BY, ASSIGNED_TO,
         TAGS, FREQUENCY
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [title, description, fileLink, hash, categoryId, sectionId, uploadedBy, null, tags || null, 'One-time']
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [title, description, fileLink, hash, sectionId, uploadedBy, null, tags || null, 'One-time']
     );
 
     // Create initial status
@@ -322,14 +315,12 @@ exports.getPendingReview = async (req, res) => {
 
     let query = `
       SELECT d.*, 
-             dc.NAME as CATEGORY_NAME,
              s.NAME as SECTION_NAME,
              creator.NAME as CREATED_BY_NAME,
              ds.STATUS as CURRENT_STATUS,
              ds.REMARKS as CURRENT_REMARKS,
              ds.CREATED_AT as STATUS_DATE
       FROM document d
-      LEFT JOIN document_category dc ON d.CATEGORY_ID = dc.CATEGORY_ID
       LEFT JOIN section s ON d.SECTION_ID = s.SECTION_ID
       LEFT JOIN user creator ON d.CREATED_BY = creator.USER_ID
       LEFT JOIN (
@@ -958,7 +949,6 @@ exports.getForwardedDocuments = async (req, res) => {
 
     const [forwardedDocuments] = await pool.query(`
       SELECT d.*, 
-             dc.NAME as CATEGORY_NAME,
              s.NAME as SECTION_NAME,
              creator.NAME as CREATED_BY_NAME,
              creator.FUNCTIONAL_ROLE as CREATED_BY_ROLE,
@@ -972,7 +962,6 @@ exports.getForwardedDocuments = async (req, res) => {
              approval.DATE_APPROVED as APPROVAL_DATE,
              approval.REMARKS as APPROVAL_REMARKS
       FROM document d
-      LEFT JOIN document_category dc ON d.CATEGORY_ID = dc.CATEGORY_ID
       LEFT JOIN section s ON d.SECTION_ID = s.SECTION_ID
       LEFT JOIN user creator ON d.CREATED_BY = creator.USER_ID
       LEFT JOIN user forwarder ON d.FORWARDED_BY = forwarder.USER_ID
@@ -1019,7 +1008,6 @@ exports.getDocumentsBySection = async (req, res) => {
     // Get regular section documents (deduplicated by fingerprint hash)
     const [sectionDocuments] = await pool.query(`
       SELECT d.*, 
-             dc.NAME as CATEGORY_NAME,
              s.NAME as SECTION_NAME,
              u.NAME as CREATED_BY_NAME,
              u.FUNCTIONAL_ROLE as CREATED_BY_ROLE,
@@ -1028,7 +1016,6 @@ exports.getDocumentsBySection = async (req, res) => {
              ds.CREATED_AT as STATUS_DATE,
              'regular' as DOCUMENT_TYPE
       FROM document d
-      LEFT JOIN document_category dc ON d.CATEGORY_ID = dc.CATEGORY_ID
       LEFT JOIN section s ON d.SECTION_ID = s.SECTION_ID
       LEFT JOIN user u ON d.CREATED_BY = u.USER_ID
       LEFT JOIN (
@@ -1063,7 +1050,6 @@ exports.getDocumentsBySection = async (req, res) => {
     if (userRole === 'division_manager') {
       const [forwardedDocuments] = await pool.query(`
         SELECT d.*, 
-               dc.NAME as CATEGORY_NAME,
                s.NAME as SECTION_NAME,
                u.NAME as CREATED_BY_NAME,
                u.FUNCTIONAL_ROLE as CREATED_BY_ROLE,
@@ -1076,7 +1062,6 @@ exports.getDocumentsBySection = async (req, res) => {
                da.ROLE as FORWARDED_BY_ROLE,
                da.REMARKS as FORWARDED_REMARKS
         FROM document d
-        LEFT JOIN document_category dc ON d.CATEGORY_ID = dc.CATEGORY_ID
         LEFT JOIN section s ON d.SECTION_ID = s.SECTION_ID
         LEFT JOIN user u ON d.CREATED_BY = u.USER_ID
         LEFT JOIN (

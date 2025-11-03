@@ -261,7 +261,6 @@ export interface Document {
   DESCRIPTION?: string;
   FILE_LINK: string;
   FINGERPRINT_HASH: string;
-  CATEGORY_ID: number;
   SECTION_ID: number;
   ASSIGNED_TO?: number;
   CREATED_BY: number;
@@ -276,12 +275,6 @@ export interface Document {
   FORWARDED_TO_REGIONAL?: boolean;
   FORWARDED_BY?: number;
   FORWARDED_AT?: string;
-}
-
-export interface DocumentCategory {
-  CATEGORY_ID: number;
-  NAME: string;
-  DESCRIPTION?: string;
 }
 
 export interface DocumentApproval {
@@ -362,7 +355,6 @@ export interface Feedback {
 
 // Extended types for UI
 export interface DocumentWithDetails extends Document {
-  category?: DocumentCategory;
   section?: Section;
   assignedUser?: User;
   createdByUser?: User;
@@ -380,7 +372,6 @@ export interface DocumentSubmissionForm {
   title: string;
   description?: string;
   fileLink: string;
-  categoryId: number;
   sectionId: number;
   assignedTo?: number;
   frequency?: string;
@@ -407,34 +398,6 @@ export type DocumentStatusType =
 
 export type ApprovalStatusType = 'Pending' | 'Approved' | 'Rejected' | 'Revision_Requested';
 export type FrequencyType = 'One-time' | 'Daily' | 'Weekly' | 'Monthly' | 'Quarterly' | 'Annually';
-
-// Workflow state tracking
-export interface WorkflowState {
-  currentStage: DocumentStatusType;
-  nextStage?: DocumentStatusType;
-  isComplete: boolean;
-  lastActionBy?: number;
-  lastActionAt?: string;
-  revisionHistory?: RevisionEntry[];
-}
-
-// Revision tracking
-export interface RevisionEntry {
-  revisionNumber: number;
-  requestedBy: number;
-  requestedAt: string;
-  feedback: string;
-  resubmittedAt?: string;
-  resubmittedBy?: number;
-}
-
-// Pending approvals for specific roles
-export interface PendingApproval {
-  document: DocumentWithDetails;
-  currentApproval: DocumentApprovalWithDetails;
-  workflowState: WorkflowState;
-  timeInStage: number; // minutes
-}
 
 // API Response types
 export interface ApiResponse<T> {
