@@ -29,6 +29,10 @@ export function SectionUnitHeadReports() {
     type: 'constructive' as 'positive' | 'constructive' | 'action_required' | 'question',
     content: '',
   })
+  
+  // Approval/Revision modal for Regional Director
+  const [processingAction, setProcessingAction] = useState(false)
+  const [remarks, setRemarks] = useState('')
 
   // Load documents submitted by staff in current section
   const loadDocuments = async () => {
@@ -75,11 +79,16 @@ export function SectionUnitHeadReports() {
     }
   }
 
-  // Write feedback on document
+  // Write feedback on document (for non-Regional Directors)
   const handleWriteFeedback = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (!selectedDocument || !user) return
+    
+    // For Regional Directors, use approval/revision flow instead
+    if (user.FUNCTIONAL_ROLE === 'regional_director') {
+      return
+    }
     
     try {
       await apiService.createFeedback({
@@ -108,6 +117,68 @@ export function SectionUnitHeadReports() {
     } catch (error) {
       console.error('Error creating feedback:', error)
       alert('Failed to send feedback. Please try again.')
+    }
+  }
+
+  // Handle document approval (Regional Director - Final Approval)
+  const handleApproveDocument = async () => {
+    if (!selectedDocument || !user) return
+    
+    try {
+      setProcessingAction(true)
+      const response = await apiService.approveDocument(
+        selectedDocument.DOCUMENT_ID,
+        remarks || 'Approved by Regional Director - Final Approval'
+      )
+      
+      if (response.success) {
+        await loadDocuments()
+        setShowFeedbackModal(false)
+        setSelectedDocument(null)
+        setRemarks('')
+        alert('Document approved successfully! This is the final approval.')
+      } else {
+        alert('Failed to approve document: ' + (response.error || 'Unknown error'))
+      }
+    } catch (error) {
+      console.error('Error approving document:', error)
+      alert('Failed to approve document. Please try again.')
+    } finally {
+      setProcessingAction(false)
+    }
+  }
+
+  // Handle request revision (Regional Director - Send back to Division Manager)
+  const handleRequestRevision = async () => {
+    if (!selectedDocument || !user) return
+    
+    if (!remarks.trim()) {
+      alert('Please provide revision instructions/remarks')
+      return
+    }
+    
+    try {
+      setProcessingAction(true)
+      const response = await apiService.requestRevision(
+        selectedDocument.DOCUMENT_ID,
+        remarks
+      )
+      
+      if (response.success) {
+        // Backend handles notification to division manager automatically
+        await loadDocuments()
+        setShowFeedbackModal(false)
+        setSelectedDocument(null)
+        setRemarks('')
+        alert('Revision requested. The document has been sent back to the Division Manager.')
+      } else {
+        alert('Failed to request revision: ' + (response.error || 'Unknown error'))
+      }
+    } catch (error) {
+      console.error('Error requesting revision:', error)
+      alert('Failed to request revision. Please try again.')
+    } finally {
+      setProcessingAction(false)
     }
   }
 
@@ -588,6 +659,7 @@ export function SectionUnitHeadReports() {
                   className="btn btn-primary btn-sm"
                   onClick={() => {
                     setSelectedDocument(doc)
+                    setRemarks('')
                     setShowFeedbackModal(true)
                   }}
                 >
@@ -596,7 +668,7 @@ export function SectionUnitHeadReports() {
                     <line x1="10" y1="9" x2="14" y2="9"/>
                     <line x1="10" y1="13" x2="18" y2="13"/>
                   </svg>
-                  Give Feedback
+                  {user?.FUNCTIONAL_ROLE === 'regional_director' ? 'Review' : 'Give Feedback'}
                 </button>
                 
                 {(doc as any).FILE_PATH && (
@@ -685,10 +757,11 @@ export function SectionUnitHeadReports() {
                     className="btn btn-primary btn-xs"
                     onClick={() => {
                       setSelectedDocument(doc)
+                      setRemarks('')
                       setShowFeedbackModal(true)
                     }}
                   >
-                    Feedback
+                    {user?.FUNCTIONAL_ROLE === 'regional_director' ? 'Review' : 'Feedback'}
                   </button>
                   {(doc as any).FILE_PATH && (
                     <button 
@@ -716,16 +789,26 @@ export function SectionUnitHeadReports() {
         </div>
       )}
 
-      {/* Feedback Modal */}
+      {/* Feedback Modal / Approval Modal */}
       {showFeedbackModal && selectedDocument && (
-        <div className="modal-overlay" onClick={() => setShowFeedbackModal(false)}>
+        <div className="modal-overlay" onClick={() => !processingAction && setShowFeedbackModal(false)}>
           <div className="modal-content large" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
             <div className="modal-header">
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <span style={{ fontSize:18 }}>💬</span>
-                <h3 style={{ margin:0 }}>Write Feedback</h3>
+                <span style={{ fontSize:18 }}>
+                  {user?.FUNCTIONAL_ROLE === 'regional_director' ? '✅' : '💬'}
+                </span>
+                <h3 style={{ margin:0 }}>
+                  {user?.FUNCTIONAL_ROLE === 'regional_director' ? 'Review Document' : 'Write Feedback'}
+                </h3>
               </div>
-              <button className="btn-close" onClick={() => setShowFeedbackModal(false)}>×</button>
+              <button 
+                className="btn-close" 
+                onClick={() => !processingAction && setShowFeedbackModal(false)}
+                disabled={processingAction}
+              >
+                ×
+              </button>
             </div>
             
             <div className="modal-body">
@@ -739,6 +822,12 @@ export function SectionUnitHeadReports() {
                   <label>Submitted by</label>
                   <div>{selectedDocument.createdByUser?.NAME || (selectedDocument as any).CREATED_BY_NAME || 'Unknown'}</div>
                 </div>
+                {(selectedDocument as any).FORWARDED_BY_NAME && (
+                  <div className="form-group" style={{ marginTop:0 }}>
+                    <label>Forwarded by</label>
+                    <div>{(selectedDocument as any).FORWARDED_BY_NAME}</div>
+                  </div>
+                )}
                 {selectedDocument.category && (
                   <div className="form-group" style={{ gridColumn:'1 / -1', marginTop:0 }}>
                     <label>Category</label>
@@ -747,54 +836,118 @@ export function SectionUnitHeadReports() {
                 )}
               </div>
               
-              <form onSubmit={handleWriteFeedback}>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:16 }}>
+              {user?.FUNCTIONAL_ROLE === 'regional_director' ? (
+                // Regional Director: Approval/Revision Modal
+                <div>
                   <div className="form-group">
-                    <label htmlFor="feedback-type">Feedback Type</label>
-                    <input
-                      id="feedback-type"
-                      list="feedback-types"
-                      value={feedbackForm.type}
-                      onChange={(e) => setFeedbackForm(prev => ({ ...prev, type: e.target.value as 'positive' | 'constructive' | 'action_required' | 'question' }))}
-                      placeholder="Type or choose..."
-                    />
-                    <datalist id="feedback-types">
-                      <option value="positive">👍 Positive</option>
-                      <option value="constructive">💡 Constructive</option>
-                      <option value="action_required">⚠️ Action Required</option>
-                      <option value="question">❓ Question</option>
-                    </datalist>
-                  </div>
-
-                  <div className="form-group" style={{ gridColumn:'2 / -1' }}>
-                    <label htmlFor="feedback-content">Feedback Content *</label>
+                    <label htmlFor="review-remarks">Remarks (Optional)</label>
                     <textarea
-                      id="feedback-content"
-                      value={feedbackForm.content}
-                      onChange={(e) => setFeedbackForm(prev => ({ 
-                        ...prev, 
-                        content: e.target.value 
-                      }))}
-                      rows={6}
-                      placeholder="Provide detailed, actionable feedback..."
-                      required
+                      id="review-remarks"
+                      value={remarks}
+                      onChange={(e) => setRemarks(e.target.value)}
+                      rows={4}
+                      placeholder="Add any remarks or comments..."
+                      disabled={processingAction}
                     />
                   </div>
+                  
+                  <div style={{ 
+                    marginTop: 16, 
+                    padding: 16, 
+                    background: '#f8fafc', 
+                    borderRadius: 8,
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <p style={{ margin: 0, fontSize: 14, color: '#64748b' }}>
+                      <strong>Note:</strong> As Regional Director, your approval will be the <strong>final approval</strong> for this document. 
+                      If you request revision, the document will be sent back to the Division Manager.
+                    </p>
+                  </div>
+                  
+                  <div className="modal-footer" style={{ marginTop: 24 }}>
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        if (!processingAction) {
+                          setShowFeedbackModal(false)
+                          setSelectedDocument(null)
+                          setRemarks('')
+                        }
+                      }}
+                      disabled={processingAction}
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      type="button"
+                      className="btn btn-danger"
+                      onClick={handleRequestRevision}
+                      disabled={processingAction}
+                    >
+                      {processingAction ? 'Processing...' : 'Request Revision'}
+                    </button>
+                    <button 
+                      type="button"
+                      className="btn btn-success"
+                      onClick={handleApproveDocument}
+                      disabled={processingAction}
+                    >
+                      {processingAction ? 'Processing...' : 'Approve (Final Approval)'}
+                    </button>
+                  </div>
                 </div>
-                
-                <div className="modal-footer">
-                  <button 
-                    type="button" 
-                    className="btn btn-secondary"
-                    onClick={() => setShowFeedbackModal(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    Send Feedback
-                  </button>
-                </div>
-              </form>
+              ) : (
+                // Other roles: Feedback Form
+                <form onSubmit={handleWriteFeedback}>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:16 }}>
+                    <div className="form-group">
+                      <label htmlFor="feedback-type">Feedback Type</label>
+                      <input
+                        id="feedback-type"
+                        list="feedback-types"
+                        value={feedbackForm.type}
+                        onChange={(e) => setFeedbackForm(prev => ({ ...prev, type: e.target.value as 'positive' | 'constructive' | 'action_required' | 'question' }))}
+                        placeholder="Type or choose..."
+                      />
+                      <datalist id="feedback-types">
+                        <option value="positive">👍 Positive</option>
+                        <option value="constructive">💡 Constructive</option>
+                        <option value="action_required">⚠️ Action Required</option>
+                        <option value="question">❓ Question</option>
+                      </datalist>
+                    </div>
+
+                    <div className="form-group" style={{ gridColumn:'2 / -1' }}>
+                      <label htmlFor="feedback-content">Feedback Content *</label>
+                      <textarea
+                        id="feedback-content"
+                        value={feedbackForm.content}
+                        onChange={(e) => setFeedbackForm(prev => ({ 
+                          ...prev, 
+                          content: e.target.value 
+                        }))}
+                        rows={6}
+                        placeholder="Provide detailed, actionable feedback..."
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="modal-footer">
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary"
+                      onClick={() => setShowFeedbackModal(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button type="submit" className="btn btn-primary">
+                      Send Feedback
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         </div>

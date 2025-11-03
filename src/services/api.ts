@@ -1017,38 +1017,13 @@ class ApiService {
   }
 
   async approveDocument(documentId: number, remarks: string): Promise<ApiResponse<void>> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const document = this.documents.find(d => d.DOCUMENT_ID === documentId);
-        if (document) {
-          // Update document status
-          const currentStatus = document.currentStatus?.STATUS || 'Submitted';
-          let newStatus = '';
-          
-          switch (currentStatus) {
-            case 'Submitted':
-              newStatus = 'Under_Division_Review';
-              break;
-            case 'Under_Section_Review':
-              newStatus = 'Under_Regional_Review';
-              break;
-            case 'Under_Division_Review':
-              newStatus = 'Approved';
-              break;
-          }
-          
-          // Update status
-          if (document.currentStatus) {
-            document.currentStatus.STATUS = newStatus;
-            document.currentStatus.REMARKS = remarks;
-          }
-          
-          // Send notifications
-          this.sendDocumentApprovalNotifications(document, newStatus, remarks);
-        }
-        resolve({ success: true });
-      }, 300);
-    });
+    try {
+      const response = await apiClient.post(`/documents/${documentId}/approve`, { remarks });
+      return response;
+    } catch (error) {
+      console.error('Error approving document:', error);
+      return { success: false, error: 'Failed to approve document' };
+    }
   }
 
   async rejectDocument(documentId: number, remarks: string): Promise<ApiResponse<void>> {
@@ -1071,22 +1046,13 @@ class ApiService {
   }
 
   async requestRevision(documentId: number, remarks: string): Promise<ApiResponse<void>> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const document = this.documents.find(d => d.DOCUMENT_ID === documentId);
-        if (document) {
-          // Update document status
-          if (document.currentStatus) {
-            document.currentStatus.STATUS = 'Revision_Required';
-            document.currentStatus.REMARKS = remarks;
-          }
-          
-          // Send notification
-          this.sendDocumentRevisionNotification(document, remarks);
-        }
-        resolve({ success: true });
-      }, 300);
-    });
+    try {
+      const response = await apiClient.post(`/documents/${documentId}/request-revision`, { remarks });
+      return response;
+    } catch (error) {
+      console.error('Error requesting revision:', error);
+      return { success: false, error: 'Failed to request revision' };
+    }
   }
 
   async resubmitDocument(documentId: number): Promise<ApiResponse<void>> {

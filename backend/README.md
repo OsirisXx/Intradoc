@@ -117,3 +117,5 @@ backend/
 ├── .env                       # Environment configuration (create this)
 └── package.json               # Dependencies
 
+
+

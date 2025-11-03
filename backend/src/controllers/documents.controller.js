@@ -406,7 +406,8 @@ exports.requestRevision = async (req, res) => {
   try {
     const { documentId } = req.params;
     const { remarks } = req.body;
-    const userId = req.user.userId;
+    const userId = req.user.USER_ID || req.user.userId;
+    const userRole = req.user.FUNCTIONAL_ROLE || req.user.role;
 
     if (!remarks) {
       return res.status(400).json({ success: false, error: 'Revision instructions are required' });
@@ -429,8 +430,20 @@ exports.requestRevision = async (req, res) => {
     // Create revision record
     await pool.query(
       'INSERT INTO document_approval (DOCUMENT_ID, USER_ID, ROLE, STATUS, REMARKS, DATE_APPROVED) VALUES (?, ?, ?, 0, ?, NOW())',
-      [documentId, userId, req.user.role, remarks]
+      [documentId, userId, userRole, remarks]
     );
+
+    // If Regional Director is requesting revision, also notify the Division Manager who forwarded it
+    if (userRole === 'regional_director' && document.FORWARDED_BY) {
+      await createNotification({
+        userId: document.FORWARDED_BY,
+        type: 'revision_required',
+        title: 'Document Revision Required',
+        message: `Regional Director requested revision for "${document.TITLE}". The document has been sent back to you. Instructions: ${remarks}`,
+        relatedDocumentId: documentId,
+        actionUrl: '/division-manager/work'
+      });
+    }
 
     // Notify document creator
     await createNotification({
@@ -438,6 +451,7 @@ exports.requestRevision = async (req, res) => {
       type: 'revision_required',
       title: 'Document Revision Required',
       message: `Your document "${document.TITLE}" requires revision. Instructions: ${remarks}`,
+      relatedDocumentId: documentId,
       actionUrl: '/staff/work'
     });
 
