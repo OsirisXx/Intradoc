@@ -296,18 +296,6 @@ export interface DocumentApproval {
   DATE_APPROVED?: string;
 }
 
-export interface DocumentRequirement {
-  REQUIREMENT_ID: number;
-  DOCUMENT_ID?: number;
-  DIVISION_ID?: number;
-  SECTION_ID?: number;
-  UNIT_ID?: number;
-  ASSIGNED_TO: number;
-  DUE_DATE: string;
-  INSTRUCTIONS?: string;
-  CREATED_AT: string;
-}
-
 export interface DocumentStatus {
   STATUS_ID: number;
   DOCUMENT_ID: number;
@@ -382,14 +370,6 @@ export interface DocumentWithDetails extends Document {
   approvals?: DocumentApproval[];
 }
 
-export interface DocumentRequirementWithDetails extends DocumentRequirement {
-  document?: Document;
-  division?: Division;
-  section?: Section;
-  unit?: Unit;
-  assignedUser?: User;
-}
-
 export interface DocumentApprovalWithDetails extends DocumentApproval {
   document?: Document;
   user?: User;
@@ -405,17 +385,6 @@ export interface DocumentSubmissionForm {
   assignedTo?: number;
   frequency?: string;
   tags?: string;
-}
-
-export interface RequirementCreationForm {
-  title: string;
-  documentId?: number;
-  divisionId?: number;
-  sectionId?: number;
-  unitId?: number;
-  assignedTo: number;
-  dueDate: string;
-  instructions?: string;
 }
 
 export interface ApprovalActionForm {

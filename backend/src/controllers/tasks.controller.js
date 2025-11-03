@@ -586,7 +586,7 @@ exports.linkDocumentToTask = async (req, res) => {
 
     // Update task status to in_progress
     await pool.query(
-      'UPDATE document_requirement SET STATUS = "in_progress" WHERE REQUIREMENT_ID = ?',
+      'UPDATE task SET STATUS = "in_progress" WHERE TASK_ID = ?',
       [taskId]
     );
 

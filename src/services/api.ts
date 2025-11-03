@@ -5,8 +5,6 @@ import { apiClient } from './apiClient';
 type Document = Types.Document;
 type DocumentWithDetails = Types.DocumentWithDetails;
 type DocumentCategory = Types.DocumentCategory;
-type DocumentRequirement = Types.DocumentRequirement;
-type DocumentRequirementWithDetails = Types.DocumentRequirementWithDetails;
 type DocumentApproval = Types.DocumentApproval;
 type DocumentApprovalWithDetails = Types.DocumentApprovalWithDetails;
 type User = Types.User;
@@ -14,7 +12,6 @@ type Section = Types.Section;
 type Division = Types.Division;
 type Unit = Types.Unit;
 type DocumentSubmissionForm = Types.DocumentSubmissionForm;
-type RequirementCreationForm = Types.RequirementCreationForm;
 type ApprovalActionForm = Types.ApprovalActionForm;
 type ApiResponse<T> = Types.ApiResponse<T>;
 type PaginatedResponse<T> = Types.PaginatedResponse<T>;
@@ -67,8 +64,8 @@ class ApiService {
       TAGS: 'budget, quarterly, finance',
       category: { CATEGORY_ID: 1, NAME: 'Financial Reports', DESCRIPTION: 'Financial documents and reports' },
       section: { SECTION_ID: 1, NAME: 'Finance', DIVISION_ID: 1 },
-      assignedUser: { USER_ID: 2, NAME: 'John Smith', ID_NUMBER: 'EMP001', EMAIL: 'john@company.com', PASSWORD: '', SECTION_ID: 1, FUNCTIONAL_ROLE: 'staff', ORGANIZATIONAL_ASSIGNMENT: 'Engineering', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
-      createdByUser: { USER_ID: 1, NAME: 'Admin User', ID_NUMBER: 'ADM001', EMAIL: 'admin@company.com', PASSWORD: '', SECTION_ID: 5, FUNCTIONAL_ROLE: 'admin', ORGANIZATIONAL_ASSIGNMENT: 'IT', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
+      assignedUser: { USER_ID: 2, NAME: 'John Smith', ID_NUMBER: 'EMP001', EMAIL: 'john@company.com', PASSWORD: '', SECTION_ID: 1, FUNCTIONAL_ROLE: 'staff', ORGANIZATIONAL_ROLE: 'Engineering', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
+      createdByUser: { USER_ID: 1, NAME: 'Admin User', ID_NUMBER: 'ADM001', EMAIL: 'admin@company.com', PASSWORD: '', SECTION_ID: 5, FUNCTIONAL_ROLE: 'admin', ORGANIZATIONAL_ROLE: 'IT', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
       currentStatus: { STATUS_ID: 1, DOCUMENT_ID: 1, STATUS: 'On-Going', REMARKS: 'Under review', CREATED_AT: '2024-03-25T10:00:00Z' }
     },
     {
@@ -86,8 +83,8 @@ class ApiService {
       TAGS: 'safety, protocols, guidelines',
       category: { CATEGORY_ID: 2, NAME: 'Safety Protocols', DESCRIPTION: 'Safety and security documentation' },
       section: { SECTION_ID: 2, NAME: 'Operations', DIVISION_ID: 1 },
-      assignedUser: { USER_ID: 3, NAME: 'Sarah Johnson', ID_NUMBER: 'EMP002', EMAIL: 'sarah@company.com', PASSWORD: '', SECTION_ID: 2, FUNCTIONAL_ROLE: 'staff', ORGANIZATIONAL_ASSIGNMENT: 'Operations', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
-      createdByUser: { USER_ID: 1, NAME: 'Admin User', ID_NUMBER: 'ADM001', EMAIL: 'admin@company.com', PASSWORD: '', SECTION_ID: 5, FUNCTIONAL_ROLE: 'admin', ORGANIZATIONAL_ASSIGNMENT: 'IT', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
+      assignedUser: { USER_ID: 3, NAME: 'Sarah Johnson', ID_NUMBER: 'EMP002', EMAIL: 'sarah@company.com', PASSWORD: '', SECTION_ID: 2, FUNCTIONAL_ROLE: 'staff', ORGANIZATIONAL_ROLE: 'Operations', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
+      createdByUser: { USER_ID: 1, NAME: 'Admin User', ID_NUMBER: 'ADM001', EMAIL: 'admin@company.com', PASSWORD: '', SECTION_ID: 5, FUNCTIONAL_ROLE: 'admin', ORGANIZATIONAL_ROLE: 'IT', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
       currentStatus: { STATUS_ID: 2, DOCUMENT_ID: 2, STATUS: 'Approved', CREATED_AT: '2024-03-22T09:15:00Z' }
     }
   ];
@@ -132,9 +129,9 @@ class ApiService {
   ];
 
   private users: User[] = [
-    { USER_ID: 1, NAME: 'Admin User', ID_NUMBER: 'ADM001', EMAIL: 'admin@company.com', PASSWORD: '', SECTION_ID: 5, FUNCTIONAL_ROLE: 'admin', ORGANIZATIONAL_ASSIGNMENT: 'IT', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
-    { USER_ID: 2, NAME: 'John Smith', ID_NUMBER: 'EMP001', EMAIL: 'john@company.com', PASSWORD: '', SECTION_ID: 1, FUNCTIONAL_ROLE: 'staff', ORGANIZATIONAL_ASSIGNMENT: 'Engineering', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
-    { USER_ID: 3, NAME: 'Sarah Johnson', ID_NUMBER: 'EMP002', EMAIL: 'sarah@company.com', PASSWORD: '', SECTION_ID: 2, FUNCTIONAL_ROLE: 'staff', ORGANIZATIONAL_ASSIGNMENT: 'Operations', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' }
+    { USER_ID: 1, NAME: 'Admin User', ID_NUMBER: 'ADM001', EMAIL: 'admin@company.com', PASSWORD: '', SECTION_ID: 5, FUNCTIONAL_ROLE: 'admin', ORGANIZATIONAL_ROLE: 'IT', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
+    { USER_ID: 2, NAME: 'John Smith', ID_NUMBER: 'EMP001', EMAIL: 'john@company.com', PASSWORD: '', SECTION_ID: 1, FUNCTIONAL_ROLE: 'staff', ORGANIZATIONAL_ROLE: 'Engineering', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
+    { USER_ID: 3, NAME: 'Sarah Johnson', ID_NUMBER: 'EMP002', EMAIL: 'sarah@company.com', PASSWORD: '', SECTION_ID: 2, FUNCTIONAL_ROLE: 'staff', ORGANIZATIONAL_ROLE: 'Operations', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' }
   ];
 
   // Mock task data
@@ -145,15 +142,17 @@ class ApiService {
       DESCRIPTION: 'Prepare monthly safety inspection report',
       ASSIGNED_TO: 2,
       ASSIGNED_BY: 1,
+      SECTION_ID: 1,
       DUE_DATE: '2024-04-15',
       STATUS: 'pending',
       PRIORITY: 'high',
+      REQUIRES_DOCUMENT: true,
       CATEGORY: 'Safety',
       TAGS: 'safety, monthly, inspection',
       CREATED_AT: '2024-03-25T10:00:00Z',
-      COMPLETED_AT: null,
-      assignedToUser: { USER_ID: 2, NAME: 'John Smith', ID_NUMBER: 'EMP001', EMAIL: 'john@company.com', PASSWORD: '', SECTION_ID: 1, FUNCTIONAL_ROLE: 'staff', ORGANIZATIONAL_ASSIGNMENT: 'Engineering', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
-      assignedByUser: { USER_ID: 1, NAME: 'Admin User', ID_NUMBER: 'ADM001', EMAIL: 'admin@company.com', PASSWORD: '', SECTION_ID: 5, FUNCTIONAL_ROLE: 'admin', ORGANIZATIONAL_ASSIGNMENT: 'IT', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' }
+      assignedTo: { USER_ID: 2, NAME: 'John Smith', ID_NUMBER: 'EMP001', EMAIL: 'john@company.com', PASSWORD: '', SECTION_ID: 1, FUNCTIONAL_ROLE: 'staff', ORGANIZATIONAL_ROLE: 'Engineering', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
+      assignedBy: { USER_ID: 1, NAME: 'Admin User', ID_NUMBER: 'ADM001', EMAIL: 'admin@company.com', PASSWORD: '', SECTION_ID: 5, FUNCTIONAL_ROLE: 'admin', ORGANIZATIONAL_ROLE: 'IT', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
+      section: { SECTION_ID: 1, NAME: 'Finance', DIVISION_ID: 1 }
     }
   ];
 
@@ -164,13 +163,12 @@ class ApiService {
       AUTHOR_ID: 1,
       RECIPIENT_ID: 2,
       RELATED_TASK_ID: 1,
-      RELATED_DOCUMENT_ID: null,
       TYPE: 'positive',
       CONTENT: 'Great work on the safety report!',
       CREATED_AT: '2024-03-25T14:00:00Z',
       READ: false,
-      authorUser: { USER_ID: 1, NAME: 'Admin User', ID_NUMBER: 'ADM001', EMAIL: 'admin@company.com', PASSWORD: '', SECTION_ID: 5, FUNCTIONAL_ROLE: 'admin', ORGANIZATIONAL_ASSIGNMENT: 'IT', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
-      recipientUser: { USER_ID: 2, NAME: 'John Smith', ID_NUMBER: 'EMP001', EMAIL: 'john@company.com', PASSWORD: '', SECTION_ID: 1, FUNCTIONAL_ROLE: 'staff', ORGANIZATIONAL_ASSIGNMENT: 'Engineering', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' }
+      author: { USER_ID: 1, NAME: 'Admin User', ID_NUMBER: 'ADM001', EMAIL: 'admin@company.com', PASSWORD: '', SECTION_ID: 5, FUNCTIONAL_ROLE: 'admin', ORGANIZATIONAL_ROLE: 'IT', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' },
+      recipient: { USER_ID: 2, NAME: 'John Smith', ID_NUMBER: 'EMP001', EMAIL: 'john@company.com', PASSWORD: '', SECTION_ID: 1, FUNCTIONAL_ROLE: 'staff', ORGANIZATIONAL_ROLE: 'Engineering', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' }
     }
   ];
 
@@ -183,9 +181,8 @@ class ApiService {
       TITLE: 'New Task Assigned',
       MESSAGE: 'You have been assigned a new task: Complete Safety Report',
       ACTION_URL: '/staff/tasks',
-      READ: false,
-      CREATED_AT: '2024-03-25T10:00:00Z',
-      user: { USER_ID: 2, NAME: 'John Smith', ID_NUMBER: 'EMP001', EMAIL: 'john@company.com', PASSWORD: '', SECTION_ID: 1, FUNCTIONAL_ROLE: 'staff', ORGANIZATIONAL_ASSIGNMENT: 'Engineering', STATUS: 'active', CREATED_AT: '2024-01-01T00:00:00Z' }
+      IS_READ: false,
+      CREATED_AT: '2024-03-25T10:00:00Z'
     }
   ];
 
@@ -671,7 +668,7 @@ class ApiService {
     return new Promise((resolve) => {
       setTimeout(() => {
         const unreadNotifications = this.notifications.filter(n => 
-          n.USER_ID === userId && !n.READ
+          n.USER_ID === userId && !n.IS_READ
         );
         resolve({ success: true, data: unreadNotifications });
       }, 300);
@@ -680,7 +677,7 @@ class ApiService {
 
   async markNotificationAsRead(notificationId: number): Promise<ApiResponse<void>> {
     try {
-      const response = await apiClient.put(`/notifications/${notificationId}/read`);
+      const response = await apiClient.put(`/notifications/${notificationId}/read`, {});
       return response;
     } catch (error) {
       console.error('Error marking notification as read:', error);
@@ -690,7 +687,7 @@ class ApiService {
 
   async markAllNotificationsAsRead(userId: number): Promise<ApiResponse<void>> {
     try {
-      const response = await apiClient.put(`/notifications/mark-all-read/${userId}`);
+      const response = await apiClient.put(`/notifications/mark-all-read/${userId}`, {});
       return response;
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
@@ -759,7 +756,7 @@ class ApiService {
 
   async markFeedbackAsRead(feedbackId: number): Promise<ApiResponse<void>> {
     try {
-      const response = await apiClient.put(`/feedback/${feedbackId}/read`);
+      const response = await apiClient.put(`/feedback/${feedbackId}/read`, {});
       return response;
     } catch (error) {
       console.error('Error marking feedback as read:', error);
@@ -774,11 +771,22 @@ class ApiService {
         const metrics: ProgressMetrics = {
           totalTasks: this.tasks.length,
           completedTasks: this.tasks.filter(t => t.STATUS === 'completed').length,
+          pendingTasks: this.tasks.filter(t => t.STATUS === 'pending').length,
           overdueTasks: this.tasks.filter(t => 
             t.STATUS !== 'completed' && new Date(t.DUE_DATE) < new Date()
           ).length,
-          completionRate: 75.5,
-          averageCompletionTime: 2.3
+          totalDocuments: 0,
+          approvedDocuments: 0,
+          pendingDocuments: 0,
+          completedDocuments: 0,
+          totalFeedback: 0,
+          readFeedback: 0,
+          unreadFeedback: 0,
+          systemHealthScore: 75.5,
+          lastUpdated: new Date().toISOString(),
+          feedbackCount: 0,
+          byDivision: [],
+          bySectionUnit: []
         };
         resolve({ success: true, data: metrics });
       }, 300);
@@ -794,16 +802,28 @@ class ApiService {
             divisionName: 'Engineering and Operations',
             totalTasks: 45,
             completedTasks: 34,
+            pendingTasks: 8,
             overdueTasks: 3,
-            completionRate: 75.6
+            totalSections: 3,
+            totalDocuments: 0,
+            approvedDocuments: 0,
+            completionRate: 75.6,
+            averageCompletionTime: 2.5,
+            averageResponseTime: 30
           },
           {
             divisionId: 2,
             divisionName: 'Administrative and Finance',
             totalTasks: 32,
             completedTasks: 28,
+            pendingTasks: 3,
             overdueTasks: 1,
-            completionRate: 87.5
+            totalSections: 3,
+            totalDocuments: 0,
+            approvedDocuments: 0,
+            completionRate: 87.5,
+            averageCompletionTime: 2.0,
+            averageResponseTime: 25
           }
         ];
         resolve({ success: true, data: metrics });
@@ -822,9 +842,12 @@ class ApiService {
             divisionName: 'Engineering and Operations',
             totalTasks: 15,
             completedTasks: 12,
+            pendingTasks: 2,
             overdueTasks: 1,
+            totalUsers: 10,
             completionRate: 80.0,
-            status: 'good'
+            staffCount: 8,
+            averageResponseTime: 25
           },
           {
             sectionId: 2,
@@ -833,9 +856,12 @@ class ApiService {
             divisionName: 'Engineering and Operations',
             totalTasks: 20,
             completedTasks: 15,
+            pendingTasks: 3,
             overdueTasks: 2,
+            totalUsers: 15,
             completionRate: 75.0,
-            status: 'warning'
+            staffCount: 12,
+            averageResponseTime: 35
           }
         ];
         resolve({ success: true, data: metrics });
@@ -847,12 +873,19 @@ class ApiService {
     return new Promise((resolve) => {
       setTimeout(() => {
         const health: SystemHealth = {
-          overallStatus: 'healthy',
-          responseTime: 150,
-          uptime: 99.9,
-          errorRate: 0.1,
+          totalUsers: 45,
           activeUsers: 45,
-          systemLoad: 65.5
+          totalTasks: this.tasks.length,
+          overdueTasks: this.tasks.filter(t => t.STATUS !== 'completed' && new Date(t.DUE_DATE) < new Date()).length,
+          pendingDocuments: 0,
+          systemUptime: 99.9,
+          overallHealthScore: 95,
+          taskCompletionRate: 75.5,
+          documentApprovalRate: 85,
+          feedbackResponseRate: 90,
+          averageTaskCompletionTime: 2.3,
+          averageDocumentReviewTime: 1.5,
+          unreadFeedback: 0
         };
         resolve({ success: true, data: health });
       }, 300);
@@ -972,7 +1005,7 @@ class ApiService {
     // Create notification for document creator
     this.createNotification({
       userId: documentCreator.USER_ID,
-      type: notificationType,
+      type: 'approval_received' as TaskNotification['TYPE'],
       title: notificationTitle,
       message: notificationMessage,
       actionUrl: '/staff/upload'
@@ -987,7 +1020,7 @@ class ApiService {
 
     this.createNotification({
       userId: documentCreator.USER_ID,
-      type: 'document_rejected',
+      type: 'reminder' as TaskNotification['TYPE'],
       title: 'Document Rejected',
       message: notificationMessage,
       actionUrl: '/staff/upload'
@@ -1002,7 +1035,7 @@ class ApiService {
 
     this.createNotification({
       userId: documentCreator.USER_ID,
-      type: 'revision_required',
+      type: 'revision_requested' as TaskNotification['TYPE'],
       title: 'Document Revision Required',
       message: notificationMessage,
       actionUrl: '/staff/upload'
@@ -1019,7 +1052,7 @@ class ApiService {
     approvers.forEach(approver => {
       this.createNotification({
         userId: approver.USER_ID,
-        type: 'document_resubmitted',
+        type: 'document_submitted' as TaskNotification['TYPE'],
         title: 'Document Resubmitted',
         message: `Document "${document.TITLE}" has been resubmitted and requires your review.`,
         actionUrl: this.getApproverReviewUrl(approver.FUNCTIONAL_ROLE)
@@ -1254,8 +1287,8 @@ class ApiService {
       // Get filename from Content-Disposition header (for file responses)
       const contentDisposition = response.headers.get('Content-Disposition');
       const metadataHeader = response.headers.get('X-Document-Metadata');
-      let filename = 'document';
-      let metadata = null;
+      let filename: string = 'document';
+      let metadata: any;
       
       if (contentDisposition) {
         const filenameMatch = contentDisposition.match(/filename="(.+)"/);
@@ -1274,7 +1307,7 @@ class ApiService {
 
       const blob = await response.blob();
       
-      return { success: true, blob, filename, contentType, isUrl: false, metadata };
+      return { success: true, blob, filename, contentType: contentType || undefined, isUrl: false, metadata };
     } catch (error) {
       console.error('Error downloading document:', error);
       return { success: false, error: 'Failed to download document' };

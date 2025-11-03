@@ -250,11 +250,11 @@ exports.getFeedbackWrittenBy = async (req, res) => {
         f.CREATED_AT,
         recipient.NAME as RECIPIENT_NAME,
         recipient.FUNCTIONAL_ROLE as RECIPIENT_ROLE,
-        dr.TITLE as TASK_TITLE,
+        t.TITLE as TASK_TITLE,
         d.TITLE as DOCUMENT_TITLE
       FROM feedback f
       LEFT JOIN user recipient ON f.RECIPIENT_ID = recipient.USER_ID
-      LEFT JOIN document_requirement dr ON f.RELATED_TASK_ID = dr.REQUIREMENT_ID
+      LEFT JOIN task t ON f.RELATED_TASK_ID = t.TASK_ID
       LEFT JOIN document d ON f.RELATED_DOCUMENT_ID = d.DOCUMENT_ID
       WHERE f.AUTHOR_ID = ?
     `;

@@ -11,7 +11,7 @@ exports.getSectionReport = async (req, res) => {
     const params = [sectionId];
 
     if (startDate && endDate) {
-      dateFilter = ' AND dr.CREATED_AT BETWEEN ? AND ?';
+      dateFilter = ' AND t.CREATED_AT BETWEEN ? AND ?';
       params.push(startDate, endDate);
     }
 
@@ -36,8 +36,8 @@ exports.getSectionReport = async (req, res) => {
         SUM(CASE WHEN STATUS != 'completed' AND DUE_DATE < CURDATE() THEN 1 ELSE 0 END) as overdue_tasks,
         SUM(CASE WHEN STATUS = 'pending' THEN 1 ELSE 0 END) as pending_tasks,
         SUM(CASE WHEN STATUS = 'in_progress' THEN 1 ELSE 0 END) as in_progress_tasks
-      FROM document_requirement dr
-      JOIN user u ON dr.ASSIGNED_TO = u.USER_ID
+      FROM task t
+      JOIN user u ON t.ASSIGNED_TO = u.USER_ID
       WHERE u.SECTION_ID = ?${dateFilter}`,
       params
     );
@@ -48,16 +48,16 @@ exports.getSectionReport = async (req, res) => {
         u.USER_ID,
         u.NAME,
         u.FUNCTIONAL_ROLE,
-        COUNT(dr.REQUIREMENT_ID) as tasks_assigned,
-        SUM(CASE WHEN dr.STATUS = 'completed' THEN 1 ELSE 0 END) as tasks_completed,
-        SUM(CASE WHEN dr.STATUS != 'completed' AND dr.DUE_DATE < CURDATE() THEN 1 ELSE 0 END) as tasks_overdue,
+        COUNT(t.TASK_ID) as tasks_assigned,
+        SUM(CASE WHEN t.STATUS = 'completed' THEN 1 ELSE 0 END) as tasks_completed,
+        SUM(CASE WHEN t.STATUS != 'completed' AND t.DUE_DATE < CURDATE() THEN 1 ELSE 0 END) as tasks_overdue,
         CASE 
-          WHEN COUNT(dr.REQUIREMENT_ID) > 0 
-          THEN ROUND((SUM(CASE WHEN dr.STATUS = 'completed' THEN 1 ELSE 0 END) / COUNT(dr.REQUIREMENT_ID)) * 100, 2)
+          WHEN COUNT(t.TASK_ID) > 0 
+          THEN ROUND((SUM(CASE WHEN t.STATUS = 'completed' THEN 1 ELSE 0 END) / COUNT(t.TASK_ID)) * 100, 2)
           ELSE 0 
         END as completion_rate
       FROM user u
-      LEFT JOIN document_requirement dr ON u.USER_ID = dr.ASSIGNED_TO${dateFilter.replace('dr.', '')}
+      LEFT JOIN task t ON u.USER_ID = t.ASSIGNED_TO${dateFilter.replace('t.', '')}
       WHERE u.SECTION_ID = ?
       GROUP BY u.USER_ID, u.NAME, u.FUNCTIONAL_ROLE
       ORDER BY completion_rate DESC`,
@@ -82,7 +82,7 @@ exports.getSectionReport = async (req, res) => {
           GROUP BY DOCUMENT_ID
         )
       ) ds ON d.DOCUMENT_ID = ds.DOCUMENT_ID
-      WHERE d.SECTION_ID = ?${dateFilter.replace('dr.', 'd.')}`,
+      WHERE d.SECTION_ID = ?${dateFilter.replace('t.', 'd.')}`,
       params
     );
 
@@ -116,7 +116,7 @@ exports.getDivisionReport = async (req, res) => {
     const params = [divisionId];
 
     if (startDate && endDate) {
-      dateFilter = ' AND dr.CREATED_AT BETWEEN ? AND ?';
+      dateFilter = ' AND t.CREATED_AT BETWEEN ? AND ?';
       params.push(startDate, endDate);
     }
 
@@ -141,8 +141,8 @@ exports.getDivisionReport = async (req, res) => {
         SUM(CASE WHEN STATUS != 'completed' AND DUE_DATE < CURDATE() THEN 1 ELSE 0 END) as overdue_tasks,
         SUM(CASE WHEN STATUS = 'pending' THEN 1 ELSE 0 END) as pending_tasks,
         SUM(CASE WHEN STATUS = 'in_progress' THEN 1 ELSE 0 END) as in_progress_tasks
-      FROM document_requirement dr
-      JOIN user u ON dr.ASSIGNED_TO = u.USER_ID
+      FROM task t
+      JOIN user u ON t.ASSIGNED_TO = u.USER_ID
       JOIN section s ON u.SECTION_ID = s.SECTION_ID
       WHERE s.DIVISION_ID = ?${dateFilter}`,
       params
@@ -153,17 +153,17 @@ exports.getDivisionReport = async (req, res) => {
       `SELECT 
         s.SECTION_ID,
         s.NAME as SECTION_NAME,
-        COUNT(dr.REQUIREMENT_ID) as total_tasks,
-        SUM(CASE WHEN dr.STATUS = 'completed' THEN 1 ELSE 0 END) as completed_tasks,
-        SUM(CASE WHEN dr.STATUS != 'completed' AND dr.DUE_DATE < CURDATE() THEN 1 ELSE 0 END) as overdue_tasks,
+        COUNT(t.TASK_ID) as total_tasks,
+        SUM(CASE WHEN t.STATUS = 'completed' THEN 1 ELSE 0 END) as completed_tasks,
+        SUM(CASE WHEN t.STATUS != 'completed' AND t.DUE_DATE < CURDATE() THEN 1 ELSE 0 END) as overdue_tasks,
         CASE 
-          WHEN COUNT(dr.REQUIREMENT_ID) > 0 
-          THEN ROUND((SUM(CASE WHEN dr.STATUS = 'completed' THEN 1 ELSE 0 END) / COUNT(dr.REQUIREMENT_ID)) * 100, 2)
+          WHEN COUNT(t.TASK_ID) > 0 
+          THEN ROUND((SUM(CASE WHEN t.STATUS = 'completed' THEN 1 ELSE 0 END) / COUNT(t.TASK_ID)) * 100, 2)
           ELSE 0 
         END as completion_rate
       FROM section s
       LEFT JOIN user u ON s.SECTION_ID = u.SECTION_ID
-      LEFT JOIN document_requirement dr ON u.USER_ID = dr.ASSIGNED_TO${dateFilter}
+      LEFT JOIN task t ON u.USER_ID = t.ASSIGNED_TO${dateFilter}
       WHERE s.DIVISION_ID = ?
       GROUP BY s.SECTION_ID, s.NAME
       ORDER BY completion_rate DESC`,
@@ -189,7 +189,7 @@ exports.getDivisionReport = async (req, res) => {
           GROUP BY DOCUMENT_ID
         )
       ) ds ON d.DOCUMENT_ID = ds.DOCUMENT_ID
-      WHERE s.DIVISION_ID = ?${dateFilter.replace('dr.', 'd.')}`,
+      WHERE s.DIVISION_ID = ?${dateFilter.replace('t.', 'd.')}`,
       params
     );
 
@@ -222,7 +222,7 @@ exports.getSystemOverview = async (req, res) => {
     const params = [];
 
     if (startDate && endDate) {
-      dateFilter = ' AND dr.CREATED_AT BETWEEN ? AND ?';
+      dateFilter = ' AND t.CREATED_AT BETWEEN ? AND ?';
       params.push(startDate, endDate);
     }
 
@@ -239,7 +239,7 @@ exports.getSystemOverview = async (req, res) => {
           THEN ROUND((SUM(CASE WHEN STATUS = 'completed' THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2)
           ELSE 0 
         END as overall_completion_rate
-      FROM document_requirement dr
+      FROM task t
       WHERE 1=1${dateFilter}`,
       params
     );
@@ -249,21 +249,21 @@ exports.getSystemOverview = async (req, res) => {
       `SELECT 
         d.DIVISION_ID,
         d.NAME as DIVISION_NAME,
-        COUNT(dr.REQUIREMENT_ID) as total_tasks,
-        SUM(CASE WHEN dr.STATUS = 'completed' THEN 1 ELSE 0 END) as completed_tasks,
-        SUM(CASE WHEN dr.STATUS != 'completed' AND dr.DUE_DATE < CURDATE() THEN 1 ELSE 0 END) as overdue_tasks,
+        COUNT(t.TASK_ID) as total_tasks,
+        SUM(CASE WHEN t.STATUS = 'completed' THEN 1 ELSE 0 END) as completed_tasks,
+        SUM(CASE WHEN t.STATUS != 'completed' AND t.DUE_DATE < CURDATE() THEN 1 ELSE 0 END) as overdue_tasks,
         CASE 
-          WHEN COUNT(dr.REQUIREMENT_ID) > 0 
-          THEN ROUND((SUM(CASE WHEN dr.STATUS = 'completed' THEN 1 ELSE 0 END) / COUNT(dr.REQUIREMENT_ID)) * 100, 2)
+          WHEN COUNT(t.TASK_ID) > 0 
+          THEN ROUND((SUM(CASE WHEN t.STATUS = 'completed' THEN 1 ELSE 0 END) / COUNT(t.TASK_ID)) * 100, 2)
           ELSE 0 
         END as completion_rate
       FROM division d
       LEFT JOIN section s ON d.DIVISION_ID = s.DIVISION_ID
       LEFT JOIN user u ON s.SECTION_ID = u.SECTION_ID
-      LEFT JOIN document_requirement dr ON u.USER_ID = dr.ASSIGNED_TO${dateFilter}
+      LEFT JOIN task t ON u.USER_ID = t.ASSIGNED_TO${dateFilter}
       GROUP BY d.DIVISION_ID, d.NAME
       ORDER BY completion_rate DESC`,
-      [divisionId, ...(startDate && endDate ? [startDate, endDate] : [])]
+      [...(startDate && endDate ? [startDate, endDate] : [])]
     );
 
     // Get document statistics
@@ -289,7 +289,7 @@ exports.getSystemOverview = async (req, res) => {
           GROUP BY DOCUMENT_ID
         )
       ) ds ON d.DOCUMENT_ID = ds.DOCUMENT_ID
-      WHERE 1=1${dateFilter.replace('dr.', 'd.')}`,
+      WHERE 1=1${dateFilter.replace('t.', 'd.')}`,
       params
     );
 
@@ -336,7 +336,7 @@ exports.getStaffReport = async (req, res) => {
     const params = [userId];
 
     if (startDate && endDate) {
-      dateFilter = ' AND dr.CREATED_AT BETWEEN ? AND ?';
+      dateFilter = ' AND t.CREATED_AT BETWEEN ? AND ?';
       params.push(startDate, endDate);
     }
 
@@ -373,12 +373,12 @@ exports.getStaffReport = async (req, res) => {
           THEN ROUND((SUM(CASE WHEN STATUS = 'completed' THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2)
           ELSE 0 
         END as completion_rate,
-        AVG(CASE WHEN STATUS = 'completed' AND COMPLETED_AT IS NOT NULL 
-          THEN DATEDIFF(COMPLETED_AT, CREATED_AT) 
+        AVG(CASE WHEN STATUS = 'completed' AND UPDATED_AT IS NOT NULL 
+          THEN DATEDIFF(UPDATED_AT, CREATED_AT) 
           ELSE NULL 
         END) as avg_completion_time_days
-      FROM document_requirement dr
-      WHERE dr.ASSIGNED_TO = ?${dateFilter}`,
+      FROM task t
+      WHERE t.ASSIGNED_TO = ?${dateFilter}`,
       params
     );
 
@@ -405,15 +405,15 @@ exports.getStaffReport = async (req, res) => {
           GROUP BY DOCUMENT_ID
         )
       ) ds ON d.DOCUMENT_ID = ds.DOCUMENT_ID
-      WHERE d.CREATED_BY = ?${dateFilter.replace('dr.', 'd.')}`,
+      WHERE d.CREATED_BY = ?${dateFilter.replace('t.', 'd.')}`,
       params
     );
 
     // Get recent activity
     const [recentActivity] = await pool.query(
-      `(SELECT 'task_completed' as activity_type, TITLE as title, COMPLETED_AT as activity_date
-       FROM document_requirement 
-       WHERE ASSIGNED_TO = ? AND STATUS = 'completed' AND COMPLETED_AT IS NOT NULL)
+      `(SELECT 'task_completed' as activity_type, TITLE as title, UPDATED_AT as activity_date
+       FROM task 
+       WHERE ASSIGNED_TO = ? AND STATUS = 'completed' AND UPDATED_AT IS NOT NULL)
        UNION ALL
        (SELECT 'document_uploaded' as activity_type, TITLE as title, CREATED_AT as activity_date
         FROM document 
