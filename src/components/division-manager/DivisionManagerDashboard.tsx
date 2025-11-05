@@ -226,7 +226,7 @@ export function DivisionManagerDashboard() {
             <div className="header-content">
               <div className="header-icon">🏢</div>
               <div className="header-text">
-                <h1>Regional Director Dashboard</h1>
+                <h1>Division Manager Dashboard</h1>
                 <p>Welcome back, {user?.NAME}</p>
               </div>
             </div>
@@ -259,7 +259,7 @@ export function DivisionManagerDashboard() {
           <div className="header-content">
             <div className="header-icon">🏢</div>
             <div className="header-text">
-              <h1>Regional Director Dashboard</h1>
+              <h1>Division Manager Dashboard</h1>
               <p>Welcome back, {user?.NAME}</p>
               <div className="header-date">
                 {new Date().toLocaleDateString('en-US', { 

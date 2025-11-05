@@ -581,7 +581,7 @@ export function SectionUnitHeadReports() {
           </div>
           <h3>No documents found</h3>
           <p>
-            {searchTerm || filter !== 'all' || categoryFilter !== 'all'
+            {searchTerm || filter !== 'all'
               ? 'Try adjusting your filters to see more documents.'
               : 'No documents have been submitted by staff yet.'
             }
@@ -727,7 +727,7 @@ export function SectionUnitHeadReports() {
                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                     <circle cx="12" cy="12" r="3"/>
                   </svg>
-                  Review
+                  Feedback
                 </button>
               </div>
             </div>
@@ -814,7 +814,7 @@ export function SectionUnitHeadReports() {
                     className="btn btn-outline btn-xs"
                     onClick={() => { setReviewDoc(doc); setShowReviewModal(true) }}
                   >
-                    Review
+                    Feedback
                   </button>
                   {user?.FUNCTIONAL_ROLE === 'regional_director' && (
                     <button
