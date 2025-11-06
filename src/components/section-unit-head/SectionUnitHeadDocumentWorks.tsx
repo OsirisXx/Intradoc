@@ -307,21 +307,19 @@ export function SectionUnitHeadDocumentWorks() {
               <table>
                 <thead>
                   <tr>
-                    <th>TITLE</th>
-                    <th>STATUS</th>
-                    <th>SHA-256</th>
-                    <th>SUBMITTED BY</th>
-                    <th>CREATED</th>
+                    <th style={{ textAlign: 'left' }}>TITLE</th>
+                    <th style={{ textAlign: 'left' }}>STATUS</th>
+                    <th style={{ textAlign: 'left' }}>SUBMITTED BY</th>
+                    <th style={{ textAlign: 'left' }}>CREATED</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sectionDocuments.map(doc => (
                     <tr key={doc.DOCUMENT_ID}>
-                      <td>{doc.TITLE}</td>
-                      <td>{getDocumentStatusBadge(doc.currentStatus?.STATUS || 'Submitted')}</td>
-                      <td>{doc.FINGERPRINT_HASH.substring(0, 12)}...</td>
-                      <td>{doc.CREATED_BY_NAME || `User #${doc.CREATED_BY}` || 'Unknown'}</td>
-                      <td>{formatDate(doc.CREATED_AT)}</td>
+                      <td style={{ textAlign: 'left' }}>{doc.TITLE}</td>
+                      <td style={{ textAlign: 'left' }}>{getDocumentStatusBadge(doc.currentStatus?.STATUS || 'Submitted')}</td>
+                      <td style={{ textAlign: 'left' }}>{doc.CREATED_BY_NAME || `User #${doc.CREATED_BY}` || 'Unknown'}</td>
+                      <td style={{ textAlign: 'left' }}>{formatDate(doc.CREATED_AT)}</td>
                     </tr>
                   ))}
                 </tbody>

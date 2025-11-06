@@ -1,4 +1,5 @@
 const { pool } = require('../config/database');
+const { addSignatureToDocument } = require('../utils/documentSigner');
 
 // Create task assignment (supports single or multiple assignees via assignedToIds)
 exports.createTask = async (req, res) => {
@@ -611,8 +612,33 @@ exports.getTaskApprovalHistory = async (req, res) => {
   try {
     const { taskId, userId } = req.params;
 
+    // First, get all document IDs that are currently assigned to this task
+    const [taskDocuments] = await pool.query(
+      'SELECT DOCUMENT_ID FROM document WHERE ASSIGNED_TO = ?',
+      [taskId]
+    );
+    const taskDocumentIds = taskDocuments.map(doc => doc.DOCUMENT_ID);
+    
+    // Build query conditions
+    let documentCondition = '';
+    const queryParams = [userId];
+    
+    if (taskDocumentIds.length > 0) {
+      // Show approvals for documents currently assigned to this task
+      const placeholders = taskDocumentIds.map(() => '?').join(',');
+      documentCondition = `da.DOCUMENT_ID IN (${placeholders})`;
+      queryParams.push(...taskDocumentIds);
+    } else {
+      // If no documents, only check for virtual approvals
+      documentCondition = 'da.DOCUMENT_ID < 0';
+    }
+    
+    // Also include virtual task approvals
+    const virtualCondition = `(da.DOCUMENT_ID = -? AND EXISTS (
+      SELECT 1 FROM TASK t WHERE t.TASK_ID = ? AND (t.ASSIGNED_BY = da.USER_ID OR t.ASSIGNED_TO = da.USER_ID)
+    ))`;
+    
     // Get approval history for documents in this task by the specified user
-    // Only show approvals for documents currently assigned to this specific task
     // Deduplicate by FINGERPRINT_HASH to show only one approval per unique document
     const [approvals] = await pool.query(
       `SELECT 
@@ -634,18 +660,10 @@ exports.getTaskApprovalHistory = async (req, res) => {
       LEFT JOIN document d ON da.DOCUMENT_ID = d.DOCUMENT_ID
       LEFT JOIN user u ON da.USER_ID = u.USER_ID
       WHERE da.USER_ID = ? AND (
-        -- Show approvals for documents currently assigned to this task
-        (d.ASSIGNED_TO = ? AND d.DOCUMENT_ID > 0) OR 
-        -- Show virtual task approvals (for tasks without documents)
-        (da.DOCUMENT_ID = -? AND EXISTS (
-          SELECT 1 FROM TASK t WHERE t.TASK_ID = ? AND (t.ASSIGNED_BY = da.USER_ID OR t.ASSIGNED_TO = da.USER_ID)
-        ))
-      ) AND (
-        -- Exclude approvals for forwarded documents (documents with "(Forwarded)" in title)
-        d.TITLE NOT LIKE '%(Forwarded)%' OR d.TITLE IS NULL
+        ${documentCondition} OR ${virtualCondition}
       )
       ORDER BY da.DATE_APPROVED DESC`,
-      [userId, taskId, taskId, taskId]
+      [...queryParams, taskId, taskId]
     );
 
     // Deduplicate approval history by FINGERPRINT_HASH
@@ -838,10 +856,86 @@ exports.approveTaskDocuments = async (req, res) => {
     }
 
     // Get all documents linked to this task
-    const [documents] = await pool.query(
-      'SELECT * FROM document WHERE ASSIGNED_TO = ?',
-      [taskId]
-    );
+    // For Division Manager, also include forwarded documents (with ASSIGNED_TO = -userId)
+    // that share the same FINGERPRINT_HASH as documents in this task
+    let documents;
+    if (userRole === 'division_manager') {
+      // First get documents directly linked to the task
+      const [taskDocs] = await pool.query(
+        'SELECT * FROM document WHERE ASSIGNED_TO = ?',
+        [taskId]
+      );
+      
+      // Then find forwarded documents (ASSIGNED_TO = -userId) with same FINGERPRINT_HASH
+      // Also find any forwarded documents assigned to this Division Manager, even if they don't share the same task
+      if (taskDocs.length > 0) {
+        const fingerprintHashes = taskDocs.map(doc => doc.FINGERPRINT_HASH).filter(Boolean);
+        
+        // Find forwarded documents in two ways:
+        // 1. Same FINGERPRINT_HASH as task docs (if any)
+        // 2. Any forwarded document assigned to this Division Manager (in case they're from different tasks)
+        let forwardedDocs = [];
+        
+        if (fingerprintHashes.length > 0) {
+          const placeholders = fingerprintHashes.map(() => '?').join(',');
+          const [forwardedDocsByHash] = await pool.query(
+            `SELECT * FROM document 
+             WHERE ASSIGNED_TO = -? 
+             AND FINGERPRINT_HASH IN (${placeholders})
+             AND TITLE LIKE '%(Forwarded)%'`,
+            [userId, ...fingerprintHashes]
+          );
+          forwardedDocs = forwardedDocsByHash;
+        }
+        
+        // Also find any other forwarded documents assigned to this Division Manager
+        // (in case they're from different tasks but still need approval)
+        const [allForwardedDocs] = await pool.query(
+          `SELECT * FROM document 
+           WHERE ASSIGNED_TO = -? 
+           AND TITLE LIKE '%(Forwarded)%'
+           AND NOT EXISTS (
+             SELECT 1 FROM document_approval da 
+             WHERE da.DOCUMENT_ID = document.DOCUMENT_ID 
+             AND da.USER_ID = ? 
+             AND da.ROLE = 'division_manager'
+             AND da.STATUS = 1
+           )`,
+          [userId, userId]
+        );
+        
+        // Combine and deduplicate by DOCUMENT_ID
+        const allDocs = [...forwardedDocs, ...allForwardedDocs];
+        const uniqueDocs = Array.from(new Map(allDocs.map(doc => [doc.DOCUMENT_ID, doc])).values());
+        
+        documents = [...taskDocs, ...uniqueDocs];
+        console.log(`[Approve Task Documents] Found ${documents.length} documents for task ${taskId} (${taskDocs.length} task docs + ${uniqueDocs.length} forwarded docs)`);
+      } else {
+        // Even if no task docs, check for forwarded documents assigned to this Division Manager
+        const [forwardedDocs] = await pool.query(
+          `SELECT * FROM document 
+           WHERE ASSIGNED_TO = -? 
+           AND TITLE LIKE '%(Forwarded)%'
+           AND NOT EXISTS (
+             SELECT 1 FROM document_approval da 
+             WHERE da.DOCUMENT_ID = document.DOCUMENT_ID 
+             AND da.USER_ID = ? 
+             AND da.ROLE = 'division_manager'
+             AND da.STATUS = 1
+           )`,
+          [userId, userId]
+        );
+        documents = forwardedDocs;
+        console.log(`[Approve Task Documents] Found ${documents.length} forwarded documents for Division Manager (no task docs)`);
+      }
+    } else {
+      // For other roles, use the original query
+      const [taskDocs] = await pool.query(
+        'SELECT * FROM document WHERE ASSIGNED_TO = ?',
+        [taskId]
+      );
+      documents = taskDocs;
+    }
 
     // Allow approving tasks even without documents
     let newStatus;
@@ -857,6 +951,102 @@ exports.approveTaskDocuments = async (req, res) => {
 
     // Update document statuses and create approval records (if documents exist)
     for (const doc of documents) {
+      // For forwarded documents (negative ASSIGNED_TO OR title contains "(Forwarded)"), 
+      // also check approvals from the original document by matching FINGERPRINT_HASH to get a complete signature count
+      // IMPORTANT: Only count actual APPROVALS (not forwarding actions) - forwarding doesn't add signatures
+      let existingSignatureCount = 0;
+      const isForwardedDocument = doc.ASSIGNED_TO < 0 || (doc.TITLE && doc.TITLE.includes('(Forwarded)'));
+      
+      if (isForwardedDocument) {
+        // For forwarded documents, we need to count signatures that are actually in the signed PDF file
+        // If the document has a SIGNED_FILE_LINK, count signatures from the original document that was signed
+        // Otherwise, count signatures from documents in the current approval chain (most recent first)
+        if (doc.SIGNED_FILE_LINK) {
+          // The signed file already exists - count approvals from THIS forwarded document
+          // BEFORE inserting the new approval record
+          const [existingApprovals] = await pool.query(
+            `SELECT COUNT(*) as count FROM document_approval 
+             WHERE DOCUMENT_ID = ? 
+               AND STATUS = 1 
+               AND REMARKS NOT LIKE '%Forwarded%'`,
+            [doc.DOCUMENT_ID]
+          );
+          const forwardedDocCount = existingApprovals[0]?.count || 0;
+          console.log(`[Document Signing] Forwarded Document ${doc.DOCUMENT_ID}: Found ${forwardedDocCount} approvals in forwarded document`);
+          
+          // Also count from the original document (most recent) - its signatures are in the file
+          // The signed file of a forwarded document contains signatures from the original document
+          // Exclude forwarded documents by checking both ASSIGNED_TO > 0 AND title doesn't contain "(Forwarded)"
+          // We want the MOST RECENT original document (not the oldest), as that's the one that was just forwarded
+          const [originalDocs] = await pool.query(
+            `SELECT DOCUMENT_ID FROM document 
+             WHERE FINGERPRINT_HASH = ? 
+               AND ASSIGNED_TO > 0
+               AND (TITLE IS NULL OR TITLE NOT LIKE '%(Forwarded)%')
+             ORDER BY CREATED_AT DESC 
+             LIMIT 1`,
+            [doc.FINGERPRINT_HASH]
+          );
+          
+          let originalDocCount = 0;
+          if (originalDocs.length > 0) {
+            // Add approvals from the original document (those signatures are in the signed file)
+            const [originalApprovals] = await pool.query(
+              `SELECT COUNT(*) as count FROM document_approval 
+               WHERE DOCUMENT_ID = ? 
+                 AND STATUS = 1 
+                 AND REMARKS NOT LIKE '%Forwarded%'`,
+              [originalDocs[0].DOCUMENT_ID]
+            );
+            originalDocCount = originalApprovals[0]?.count || 0;
+            console.log(`[Document Signing] Forwarded Document ${doc.DOCUMENT_ID}: Found ${originalDocCount} approvals in original document ${originalDocs[0].DOCUMENT_ID}`);
+          }
+          
+          existingSignatureCount = forwardedDocCount + originalDocCount;
+          console.log(`[Document Signing] Forwarded Document ${doc.DOCUMENT_ID}: Total signature count = ${forwardedDocCount} (forwarded) + ${originalDocCount} (original) = ${existingSignatureCount}`);
+        } else {
+          // No signed file yet - count from the original document (most recent)
+          // Exclude forwarded documents by checking both ASSIGNED_TO > 0 AND title doesn't contain "(Forwarded)"
+          // We want the MOST RECENT original document (not the oldest), as that's the one that was just forwarded
+          const [originalDocs] = await pool.query(
+            `SELECT DOCUMENT_ID FROM document 
+             WHERE FINGERPRINT_HASH = ? 
+               AND ASSIGNED_TO > 0
+               AND (TITLE IS NULL OR TITLE NOT LIKE '%(Forwarded)%')
+             ORDER BY CREATED_AT DESC 
+             LIMIT 1`,
+            [doc.FINGERPRINT_HASH]
+          );
+          
+          if (originalDocs.length > 0) {
+            const [existingApprovals] = await pool.query(
+              `SELECT COUNT(*) as count FROM document_approval 
+               WHERE DOCUMENT_ID = ? 
+                 AND STATUS = 1 
+                 AND REMARKS NOT LIKE '%Forwarded%'`,
+              [originalDocs[0].DOCUMENT_ID]
+            );
+            existingSignatureCount = existingApprovals[0]?.count || 0;
+            console.log(`[Document Signing] Forwarded Document ${doc.DOCUMENT_ID}: No SIGNED_FILE_LINK, found ${existingSignatureCount} approvals in original document ${originalDocs[0].DOCUMENT_ID}`);
+          } else {
+            existingSignatureCount = 0;
+            console.log(`[Document Signing] Forwarded Document ${doc.DOCUMENT_ID}: No SIGNED_FILE_LINK and no original document found with hash ${doc.FINGERPRINT_HASH}`);
+          }
+        }
+        console.log(`[Document Signing] Forwarded Document ${doc.DOCUMENT_ID}: Found ${existingSignatureCount} existing approved signatures (from current document chain)`);
+      } else {
+        // Regular document - count actual approvals (not forwarding actions) for this specific document
+        const [existingApprovals] = await pool.query(
+          `SELECT COUNT(*) as count FROM document_approval 
+           WHERE DOCUMENT_ID = ? 
+             AND STATUS = 1 
+             AND REMARKS NOT LIKE '%Forwarded%'`,
+          [doc.DOCUMENT_ID]
+        );
+        existingSignatureCount = existingApprovals[0]?.count || 0;
+        console.log(`[Document Signing] Task Document ${doc.DOCUMENT_ID}: Found ${existingSignatureCount} existing approved signatures (excluding forwarding actions)`);
+      }
+      
       // Insert new document status
       await pool.query(
         'INSERT INTO document_status (DOCUMENT_ID, STATUS, REMARKS, CREATED_AT) VALUES (?, ?, ?, NOW())',
@@ -868,6 +1058,74 @@ exports.approveTaskDocuments = async (req, res) => {
         'INSERT INTO document_approval (DOCUMENT_ID, USER_ID, ROLE, STATUS, REMARKS, DATE_APPROVED) VALUES (?, ?, ?, 1, ?, NOW())',
         [doc.DOCUMENT_ID, userId, userRole, approvalMessage]
       );
+
+      // Add signature to document
+      try {
+        // Get approver name from user table
+        const [users] = await pool.query('SELECT NAME FROM user WHERE USER_ID = ?', [userId]);
+        const approverName = users.length > 0 ? users[0].NAME : 'Unknown';
+
+        // Determine source file: Use SIGNED_FILE_LINK if exists (for cumulative signatures), otherwise use FILE_LINK
+        // For forwarded documents, also check if we should use the signed file from the original document
+        let sourceFilePath = doc.SIGNED_FILE_LINK || doc.FILE_LINK;
+        
+        // If this is a forwarded document (negative ASSIGNED_TO OR title contains "(Forwarded)") 
+        // and doesn't have SIGNED_FILE_LINK, try to find the signed version
+        // from the original document (same FINGERPRINT_HASH, positive ASSIGNED_TO)
+        // Prefer documents with SIGNED_FILE_LINK, and get the most recently updated one
+        if (isForwardedDocument && !doc.SIGNED_FILE_LINK) {
+          const [originalDocs] = await pool.query(
+            `SELECT SIGNED_FILE_LINK, DOCUMENT_ID, TITLE 
+             FROM document 
+             WHERE FINGERPRINT_HASH = ? 
+               AND ASSIGNED_TO > 0 
+               AND SIGNED_FILE_LINK IS NOT NULL
+               AND (TITLE IS NULL OR TITLE NOT LIKE '%(Forwarded)%')
+             ORDER BY CREATED_AT DESC 
+             LIMIT 1`,
+            [doc.FINGERPRINT_HASH]
+          );
+          if (originalDocs.length > 0 && originalDocs[0].SIGNED_FILE_LINK) {
+            sourceFilePath = originalDocs[0].SIGNED_FILE_LINK;
+            console.log(`[Document Signing] Forwarded document ${doc.DOCUMENT_ID}: Found signed file from original document ${originalDocs[0].DOCUMENT_ID} (${originalDocs[0].TITLE}): ${sourceFilePath}`);
+          } else {
+            console.log(`[Document Signing] Forwarded document ${doc.DOCUMENT_ID}: No signed file found in original documents, using FILE_LINK`);
+          }
+        }
+        
+        console.log(`[Document Signing] Task Document ${doc.DOCUMENT_ID}: Adding signature for ${approverName} (${userRole})`);
+        console.log(`[Document Signing] Source file: ${sourceFilePath}`);
+        
+        // Check if source file is a URL (external link) - skip signing for URLs
+        if (sourceFilePath && !sourceFilePath.startsWith('http://') && !sourceFilePath.startsWith('https://')) {
+          // Add signature to document (pass existingSignatureCount for proper positioning)
+          console.log(`[Document Signing] Starting signature process for document ${doc.DOCUMENT_ID}...`);
+          const signedFilePath = await addSignatureToDocument(
+            sourceFilePath,
+            approverName,
+            userRole,
+            doc.DOCUMENT_ID,
+            existingSignatureCount
+          );
+
+          console.log(`[Document Signing] Signature added successfully. Signed file: ${signedFilePath}`);
+
+          // Store signed file path in database (preserve original FILE_LINK and FINGERPRINT_HASH)
+          await pool.query(
+            'UPDATE document SET SIGNED_FILE_LINK = ? WHERE DOCUMENT_ID = ?',
+            [signedFilePath, doc.DOCUMENT_ID]
+          );
+          
+          console.log(`[Document Signing] Signed file path stored in database for document ${doc.DOCUMENT_ID}`);
+        } else {
+          console.log(`[Document Signing] Skipping signature for URL-based document: ${sourceFilePath}`);
+        }
+      } catch (signingError) {
+        // Log error but don't fail the approval process
+        console.error(`[Document Signing] ERROR adding signature to document ${doc.DOCUMENT_ID}:`, signingError);
+        console.error(`[Document Signing] Error stack:`, signingError.stack);
+        // Approval still succeeds even if signing fails
+      }
     }
 
     // For tasks without documents, we need a different approach since DOCUMENT_ID cannot be NULL
@@ -1081,7 +1339,9 @@ exports.forwardTaskToDivisionManager = async (req, res) => {
 
     // Allow forwarding tasks even without documents
 
-    // Update document statuses and create approval records
+    // Update document statuses and create approval records, and track signed files
+    const signedFilesMap = new Map(); // Map document ID to signed file path
+    
     for (const doc of documents) {
       // Insert new document status
       await pool.query(
@@ -1089,35 +1349,56 @@ exports.forwardTaskToDivisionManager = async (req, res) => {
         [doc.DOCUMENT_ID, 'Under_Division_Review', remarks || 'Forwarded to Division Manager']
       );
 
-      // Create approval record
+      // Create approval record for forwarding (but don't add signature - forwarding is just a status change)
       await pool.query(
         'INSERT INTO document_approval (DOCUMENT_ID, USER_ID, ROLE, STATUS, REMARKS, DATE_APPROVED) VALUES (?, ?, ?, 1, ?, NOW())',
         [doc.DOCUMENT_ID, userId, userRole, remarks || 'Forwarded to Division Manager']
       );
+
+      // Use the existing signed file (if any) for the forwarded copy - don't add a new signature
+      // Forwarding should not add a signature, only approvals should add signatures
+      const fileToUse = doc.SIGNED_FILE_LINK || doc.FILE_LINK;
+      signedFilesMap.set(doc.DOCUMENT_ID, fileToUse);
+      
+      console.log(`[Document Forwarding] Document ${doc.DOCUMENT_ID}: Using ${fileToUse === doc.SIGNED_FILE_LINK ? 'signed' : 'original'} file for forwarded copy`);
     }
 
     // Handle notifications based on targeting
     if (targetDivisionManagerId) {
       // Copy documents to the Division Manager for review in reports
       for (const doc of documents) {
+        // Use the signed file we just created, or fallback to original
+        const fileLinkToUse = signedFilesMap.get(doc.DOCUMENT_ID) || doc.SIGNED_FILE_LINK || doc.FILE_LINK;
+        
+        console.log(`[Forward Document Copy] Creating forwarded copy for document ${doc.DOCUMENT_ID}`);
+        console.log(`[Forward Document Copy] Original FILE_LINK: ${doc.FILE_LINK}`);
+        console.log(`[Forward Document Copy] Original SIGNED_FILE_LINK: ${doc.SIGNED_FILE_LINK}`);
+        console.log(`[Forward Document Copy] Signed file from map: ${signedFilesMap.get(doc.DOCUMENT_ID)}`);
+        console.log(`[Forward Document Copy] File to use for copy: ${fileLinkToUse}`);
+        
         // Create a copy of the document for Division Manager review
+        // If we're using a signed file, set both FILE_LINK and SIGNED_FILE_LINK to the signed version
+        const isSignedFile = signedFilesMap.has(doc.DOCUMENT_ID) || (doc.SIGNED_FILE_LINK && fileLinkToUse === doc.SIGNED_FILE_LINK);
+        
+        console.log(`[Forward Document Copy] Is signed file: ${isSignedFile}`);
+        
         const [newDocResult] = await pool.query(
           `INSERT INTO document (
             TITLE, DESCRIPTION, FILE_LINK, FINGERPRINT_HASH, 
-            CATEGORY_ID, SECTION_ID, CREATED_BY, ASSIGNED_TO,
-            TAGS, FREQUENCY
+            SECTION_ID, CREATED_BY, ASSIGNED_TO,
+            TAGS, FREQUENCY, SIGNED_FILE_LINK
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             doc.TITLE + ' (Forwarded)',
             doc.DESCRIPTION + (remarks ? `\n\nForwarded with remarks: ${remarks}` : ''),
-            doc.FILE_LINK,
+            fileLinkToUse, // Use signed version if available (contains Section Unit Head signature)
             doc.FINGERPRINT_HASH,
-            doc.CATEGORY_ID,
             doc.SECTION_ID,
             doc.CREATED_BY,
             -targetDivisionManagerId, // Use negative ID to indicate forwarded to division manager
             doc.TAGS,
-            doc.FREQUENCY
+            doc.FREQUENCY,
+            isSignedFile ? fileLinkToUse : null // Store signed file path if we're using a signed version
           ]
         );
 
@@ -1157,15 +1438,14 @@ exports.forwardTaskToDivisionManager = async (req, res) => {
         const [newDocResult] = await pool.query(
           `INSERT INTO document (
             TITLE, DESCRIPTION, FILE_LINK, FINGERPRINT_HASH, 
-            CATEGORY_ID, SECTION_ID, CREATED_BY, ASSIGNED_TO,
+            SECTION_ID, CREATED_BY, ASSIGNED_TO,
             TAGS, FREQUENCY
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             doc.TITLE + ' (Forwarded)',
             doc.DESCRIPTION + (remarks ? `\n\nForwarded with remarks: ${remarks}` : ''),
             doc.FILE_LINK,
             doc.FINGERPRINT_HASH,
-            doc.CATEGORY_ID,
             doc.SECTION_ID,
             doc.CREATED_BY, // Preserve original creator
             targetTaskId, // Assign to the Section Unit Head's task

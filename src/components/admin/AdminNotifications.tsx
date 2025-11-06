@@ -34,9 +34,10 @@ export function AdminNotifications() {
     try {
       const response = await apiService.markNotificationAsRead(notificationId)
       if (response.success) {
+        const now = new Date().toISOString()
         setNotifications(prev => prev.map(notif => 
           notif.NOTIFICATION_ID === notificationId 
-            ? { ...notif, IS_READ: true }
+            ? { ...notif, IS_READ: true, READ_AT: now }
             : notif
         ))
       }
@@ -156,7 +157,9 @@ export function AdminNotifications() {
                   {notification.MESSAGE}
                 </div>
                 <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                  {getTimeAgo(notification.CREATED_AT)}
+                  {notification.IS_READ && notification.READ_AT 
+                    ? `Read: ${getTimeAgo(notification.READ_AT)} • Created: ${getTimeAgo(notification.CREATED_AT)}`
+                    : `Created: ${getTimeAgo(notification.CREATED_AT)}`}
                 </div>
               </div>
             ))}

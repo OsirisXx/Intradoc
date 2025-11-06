@@ -192,6 +192,31 @@ export function DocumentViewModal({
     onClose()
   }
 
+  const handleViewContent = () => {
+    if (!documentUrl) return
+    
+    // For file submissions (blob URLs), open in new window/tab
+    // This will open PDFs and documents in the browser's native viewer
+    if (isUrlSubmission) {
+      // For URL submissions, open in new tab
+      window.open(documentUrl, '_blank', 'noopener,noreferrer')
+    } else {
+      // For blob URLs, open in new window so browser can handle it
+      // This will open PDFs in the browser's native PDF viewer
+      const newWindow = window.open(documentUrl, '_blank', 'noopener,noreferrer')
+      if (!newWindow) {
+        // Fallback if popup is blocked - create a link and click it
+        const a = document.createElement('a')
+        a.href = documentUrl
+        a.target = '_blank'
+        a.rel = 'noopener noreferrer'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+      }
+    }
+  }
+
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes'
     const k = 1024
@@ -407,13 +432,43 @@ export function DocumentViewModal({
     // For file submissions, show appropriate preview
     switch (fileInfo.previewType) {
       case 'iframe':
+        // Replace iframe preview with a card that has View Content button
         return (
-          <div className="document-preview-iframe">
-            <iframe 
-              src={documentUrl} 
-              title={metadata?.title || documentTitle}
-              className="document-iframe"
-            />
+          <div className="document-preview-download">
+            <div className="download-preview-card">
+              <div className="url-preview-header">
+                <h3>{metadata?.title || documentTitle}</h3>
+              </div>
+              {metadata?.fileInfo && (
+                <div className="file-info">
+                  <p className="file-name">File: {metadata.fileInfo.name}</p>
+                  {metadata.fileInfo.size && (
+                    <p className="file-size">Size: {formatFileSize(metadata.fileInfo.size)}</p>
+                  )}
+                </div>
+              )}
+              <div className="download-actions">
+                <button 
+                  className="btn btn-primary" 
+                  onClick={handleViewContent}
+                >
+                  📄 View Content
+                </button>
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={() => {
+                    const a = document.createElement('a')
+                    a.href = documentUrl
+                    a.download = metadata?.fileInfo?.name || metadata?.title || documentTitle
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                  }}
+                >
+                  Download File
+                </button>
+              </div>
+            </div>
           </div>
         )
 
@@ -438,27 +493,30 @@ export function DocumentViewModal({
               {metadata?.fileInfo && (
                 <div className="file-info">
                   <p className="file-name">File: {metadata.fileInfo.name}</p>
+                  {metadata.fileInfo.size && (
+                    <p className="file-size">Size: {formatFileSize(metadata.fileInfo.size)}</p>
+                  )}
                 </div>
               )}
               <div className="download-actions">
                 <button 
                   className="btn btn-primary" 
+                  onClick={handleViewContent}
+                >
+                  📄 View Content
+                </button>
+                <button 
+                  className="btn btn-secondary" 
                   onClick={() => {
                     const a = document.createElement('a')
                     a.href = documentUrl
-                    a.download = metadata?.title || documentTitle
+                    a.download = metadata?.fileInfo?.name || metadata?.title || documentTitle
                     document.body.appendChild(a)
                     a.click()
                     document.body.removeChild(a)
                   }}
                 >
                   Download File
-                </button>
-                <button 
-                  className="btn btn-secondary" 
-                  onClick={() => window.open(documentUrl, '_blank')}
-                >
-                  Open in New Tab
                 </button>
               </div>
             </div>

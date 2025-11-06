@@ -250,9 +250,6 @@ export function RegionalDirectorReview() {
                       <div style={{ fontSize: 12, color: '#64748b' }}>
                         {document.DESCRIPTION}
                       </div>
-                      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
-                        SHA: {document.FINGERPRINT_HASH.substring(0, 16)}...
-                      </div>
                     </div>,
                     <div>
                       <div style={{ fontWeight: 500 }}>{document.section?.NAME}</div>
@@ -340,9 +337,6 @@ export function RegionalDirectorReview() {
                       <div style={{ fontSize: 12, color: '#64748b' }}>
                         {document.DESCRIPTION}
                       </div>
-                      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
-                        SHA: {document.FINGERPRINT_HASH.substring(0, 16)}...
-                      </div>
                     </div>,
                     <div>
                       <div style={{ fontWeight: 500 }}>{document.section?.NAME}</div>
@@ -392,7 +386,7 @@ export function RegionalDirectorReview() {
               </div>
             ) : (
               <Table
-                columns={["Document", "Division", "Approval Chain", "Archived Date", "SHA-256"]}
+                columns={["Document", "Division", "Approval Chain", "Archived Date"]}
                 rows={archivedDocuments.map(document => [
                   <div>
                     <div style={{ fontWeight: 600 }}>{document.TITLE}</div>
@@ -411,10 +405,7 @@ export function RegionalDirectorReview() {
                   </div>,
                   <div style={{ fontSize: 12 }}>
                     {new Date(document.currentStatus?.CREATED_AT || '').toLocaleDateString()}
-                  </div>,
-                  <code style={{ fontSize: 11 }}>
-                    {document.FINGERPRINT_HASH.substring(0, 16)}...
-                  </code>
+                  </div>
                 ])}
               />
             )}

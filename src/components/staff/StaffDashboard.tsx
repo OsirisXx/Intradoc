@@ -87,7 +87,10 @@ export function StaffDashboard() {
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     })
   }
 
@@ -183,20 +186,20 @@ export function StaffDashboard() {
                 <table className="document-status-table">
                   <thead>
                     <tr>
-                      <th>TITLE</th>
-                      <th>STATUS</th>
+                      <th style={{ textAlign: 'left' }}>TITLE</th>
+                      <th style={{ textAlign: 'left' }}>STATUS</th>
                     </tr>
                   </thead>
                   <tbody>
                     {tasks.map(task => (
                       <tr key={task.TASK_ID}>
-                        <td>
+                        <td style={{ textAlign: 'left' }}>
                           <div className="document-title">{task.TITLE}</div>
                           <div className="document-date">
                             Due: {formatDate(task.DUE_DATE)}
                           </div>
                         </td>
-                        <td>{getTaskStatusBadge(task.STATUS)}</td>
+                        <td style={{ textAlign: 'left' }}>{getTaskStatusBadge(task.STATUS)}</td>
                       </tr>
                     ))}
                   </tbody>

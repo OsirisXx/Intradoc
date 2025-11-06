@@ -3,6 +3,7 @@ const multer = require('multer');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { addSignatureToDocument } = require('../utils/documentSigner');
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -296,6 +297,17 @@ exports.deleteDocument = async (req, res) => {
         console.warn('Failed to remove file from disk:', e.message);
       }
     }
+    
+    // Also remove signed file from disk if local
+    if (doc.SIGNED_FILE_LINK && !(doc.SIGNED_FILE_LINK.startsWith('http://') || doc.SIGNED_FILE_LINK.startsWith('https://'))) {
+      try {
+        if (fs.existsSync(doc.SIGNED_FILE_LINK)) {
+          fs.unlinkSync(doc.SIGNED_FILE_LINK);
+        }
+      } catch (e) {
+        console.warn('Failed to remove signed file from disk:', e.message);
+      }
+    }
 
     await pool.query('DELETE FROM document WHERE DOCUMENT_ID = ?', [documentId]);
     await pool.query('DELETE FROM document_status WHERE DOCUMENT_ID = ?', [documentId]);
@@ -418,6 +430,123 @@ exports.approveDocument = async (req, res) => {
         return res.status(403).json({ success: false, error: 'Unauthorized to approve documents' });
     }
 
+    // Count existing approved signatures BEFORE creating new approval record
+    // For forwarded documents (negative ASSIGNED_TO OR title contains "(Forwarded)"), 
+    // count across all documents with same FINGERPRINT_HASH
+    // IMPORTANT: Only count actual APPROVALS (not forwarding actions) - forwarding doesn't add signatures
+    let existingSignatureCount = 0;
+    let approvalDetails = [];
+    const isForwardedDocument = document.ASSIGNED_TO < 0 || (document.TITLE && document.TITLE.includes('(Forwarded)'));
+    
+    if (isForwardedDocument) {
+      // For forwarded documents, count approvals from THIS document + the original document
+      // This ensures we count only signatures that are actually in the signed PDF file
+      if (document.SIGNED_FILE_LINK) {
+        // Count approvals from THIS forwarded document
+        const [existingApprovals] = await pool.query(
+          `SELECT COUNT(*) as count FROM document_approval 
+           WHERE DOCUMENT_ID = ? 
+             AND STATUS = 1 
+             AND REMARKS NOT LIKE '%Forwarded%'`,
+          [documentId]
+        );
+        existingSignatureCount = existingApprovals[0]?.count || 0;
+        
+        // Also count from the original document (most recent) - its signatures are in the file
+        // Exclude forwarded documents by checking both ASSIGNED_TO > 0 AND title doesn't contain "(Forwarded)"
+        // We want the MOST RECENT original document (not the oldest), as that's the one that was just forwarded
+        const [originalDocs] = await pool.query(
+          `SELECT DOCUMENT_ID FROM document 
+           WHERE FINGERPRINT_HASH = ? 
+             AND ASSIGNED_TO > 0
+             AND (TITLE IS NULL OR TITLE NOT LIKE '%(Forwarded)%')
+           ORDER BY CREATED_AT DESC 
+           LIMIT 1`,
+          [document.FINGERPRINT_HASH]
+        );
+        
+        if (originalDocs.length > 0) {
+          // Add approvals from the original document (those signatures are in the signed file)
+          const [originalApprovals] = await pool.query(
+            `SELECT COUNT(*) as count FROM document_approval 
+             WHERE DOCUMENT_ID = ? 
+               AND STATUS = 1 
+               AND REMARKS NOT LIKE '%Forwarded%'`,
+            [originalDocs[0].DOCUMENT_ID]
+          );
+          existingSignatureCount += (originalApprovals[0]?.count || 0);
+        }
+      } else {
+        // No signed file yet - count from the original document (most recent)
+        // Exclude forwarded documents by checking both ASSIGNED_TO > 0 AND title doesn't contain "(Forwarded)"
+        // We want the MOST RECENT original document (not the oldest), as that's the one that was just forwarded
+        const [originalDocs] = await pool.query(
+          `SELECT DOCUMENT_ID FROM document 
+           WHERE FINGERPRINT_HASH = ? 
+             AND ASSIGNED_TO > 0
+             AND (TITLE IS NULL OR TITLE NOT LIKE '%(Forwarded)%')
+           ORDER BY CREATED_AT DESC 
+           LIMIT 1`,
+          [document.FINGERPRINT_HASH]
+        );
+        
+        if (originalDocs.length > 0) {
+          const [existingApprovals] = await pool.query(
+            `SELECT COUNT(*) as count FROM document_approval 
+             WHERE DOCUMENT_ID = ? 
+               AND STATUS = 1 
+               AND REMARKS NOT LIKE '%Forwarded%'`,
+            [originalDocs[0].DOCUMENT_ID]
+          );
+          existingSignatureCount = existingApprovals[0]?.count || 0;
+        } else {
+          existingSignatureCount = 0;
+        }
+      }
+      
+      // Get approval details for debugging (from both documents)
+      const [approvalDetailsQuery] = await pool.query(
+        `SELECT APPROVAL_ID, USER_ID, ROLE, STATUS, REMARKS, DATE_APPROVED 
+         FROM document_approval 
+         WHERE DOCUMENT_ID = ? 
+           AND STATUS = 1 
+           AND REMARKS NOT LIKE '%Forwarded%'
+         ORDER BY DATE_APPROVED ASC`,
+        [documentId]
+      );
+      approvalDetails = approvalDetailsQuery;
+      
+      console.log(`[Document Signing] Forwarded Document ${documentId}: Found ${existingSignatureCount} existing approved signatures (from current document chain)`);
+    } else {
+      // Regular document - count actual approvals (not forwarding actions) for this specific document
+      const [existingApprovals] = await pool.query(
+        `SELECT COUNT(*) as count FROM document_approval 
+         WHERE DOCUMENT_ID = ? 
+           AND STATUS = 1 
+           AND REMARKS NOT LIKE '%Forwarded%'`,
+        [documentId]
+      );
+      existingSignatureCount = existingApprovals[0]?.count || 0;
+      
+      // Get approval details for debugging
+      const [approvalDetailsQuery] = await pool.query(
+        `SELECT APPROVAL_ID, USER_ID, ROLE, STATUS, REMARKS, DATE_APPROVED 
+         FROM document_approval 
+         WHERE DOCUMENT_ID = ? 
+           AND STATUS = 1 
+           AND REMARKS NOT LIKE '%Forwarded%'
+         ORDER BY DATE_APPROVED ASC`,
+        [documentId]
+      );
+      approvalDetails = approvalDetailsQuery;
+      
+      console.log(`[Document Signing] Document ${documentId}: Found ${existingSignatureCount} existing approved signatures (excluding forwarding actions)`);
+    }
+    
+    console.log(`[Document Signing] Approval details:`, JSON.stringify(approvalDetails, null, 2));
+    console.log(`[Document Signing] Document FILE_LINK: ${document.FILE_LINK}`);
+    console.log(`[Document Signing] Document SIGNED_FILE_LINK: ${document.SIGNED_FILE_LINK}`);
+
     // Insert new status
     await pool.query(
       'INSERT INTO document_status (DOCUMENT_ID, STATUS, REMARKS, CREATED_AT) VALUES (?, ?, ?, NOW())',
@@ -429,6 +558,73 @@ exports.approveDocument = async (req, res) => {
       'INSERT INTO document_approval (DOCUMENT_ID, USER_ID, ROLE, STATUS, REMARKS, DATE_APPROVED) VALUES (?, ?, ?, 1, ?, NOW())',
       [documentId, userId, userRole, remarks || 'Approved']
     );
+
+    // Add signature to document
+    try {
+      // Get approver name from user table
+      const [users] = await pool.query('SELECT NAME FROM user WHERE USER_ID = ?', [userId]);
+      const approverName = users.length > 0 ? users[0].NAME : 'Unknown';
+
+      // Determine source file: Use SIGNED_FILE_LINK if exists (for cumulative signatures), otherwise use FILE_LINK
+      // For forwarded documents, also check if we should use the signed file from the original document
+      let sourceFilePath = document.SIGNED_FILE_LINK || document.FILE_LINK;
+      
+      // If this is a forwarded document (negative ASSIGNED_TO OR title contains "(Forwarded)") 
+      // and doesn't have SIGNED_FILE_LINK, try to find the signed version
+      // from the original document (same FINGERPRINT_HASH, positive ASSIGNED_TO)
+      // Prefer documents with SIGNED_FILE_LINK, and get the most recently updated one
+      if (isForwardedDocument && !document.SIGNED_FILE_LINK) {
+        const [originalDocs] = await pool.query(
+          `SELECT SIGNED_FILE_LINK, DOCUMENT_ID, TITLE 
+           FROM document 
+           WHERE FINGERPRINT_HASH = ? 
+             AND ASSIGNED_TO > 0 
+             AND SIGNED_FILE_LINK IS NOT NULL 
+           ORDER BY CREATED_AT DESC 
+           LIMIT 1`,
+          [document.FINGERPRINT_HASH]
+        );
+        if (originalDocs.length > 0 && originalDocs[0].SIGNED_FILE_LINK) {
+          sourceFilePath = originalDocs[0].SIGNED_FILE_LINK;
+          console.log(`[Document Signing] Forwarded document ${documentId}: Found signed file from original document ${originalDocs[0].DOCUMENT_ID} (${originalDocs[0].TITLE}): ${sourceFilePath}`);
+        } else {
+          console.log(`[Document Signing] Forwarded document ${documentId}: No signed file found in original documents, using FILE_LINK`);
+        }
+      }
+      
+      console.log(`[Document Signing] Document ${documentId}: Adding signature for ${approverName} (${userRole})`);
+      console.log(`[Document Signing] Source file: ${sourceFilePath}`);
+      
+      // Check if source file is a URL (external link) - skip signing for URLs
+      if (sourceFilePath && !sourceFilePath.startsWith('http://') && !sourceFilePath.startsWith('https://')) {
+        // Add signature to document (pass existingSignatureCount for proper positioning)
+        console.log(`[Document Signing] Starting signature process for document ${documentId}...`);
+        const signedFilePath = await addSignatureToDocument(
+          sourceFilePath,
+          approverName,
+          userRole,
+          documentId,
+          existingSignatureCount
+        );
+
+        console.log(`[Document Signing] Signature added successfully. Signed file: ${signedFilePath}`);
+
+        // Store signed file path in database (preserve original FILE_LINK and FINGERPRINT_HASH)
+        await pool.query(
+          'UPDATE document SET SIGNED_FILE_LINK = ? WHERE DOCUMENT_ID = ?',
+          [signedFilePath, documentId]
+        );
+        
+        console.log(`[Document Signing] Signed file path stored in database for document ${documentId}`);
+      } else {
+        console.log(`[Document Signing] Skipping signature for URL-based document: ${sourceFilePath}`);
+      }
+    } catch (signingError) {
+      // Log error but don't fail the approval process
+      console.error(`[Document Signing] ERROR adding signature to document ${documentId}:`, signingError);
+      console.error(`[Document Signing] Error stack:`, signingError.stack);
+      // Approval still succeeds even if signing fails
+    }
 
     // If final approval, archive document
     if (newStatus === 'Approved') {
@@ -889,6 +1085,15 @@ exports.approveForwardedDocument = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Document has already been approved' });
     }
 
+    // Count existing approved signatures BEFORE creating new approval record
+    const [existingApprovals] = await pool.query(
+      'SELECT COUNT(*) as count FROM document_approval WHERE DOCUMENT_ID = ? AND STATUS = 1',
+      [documentId]
+    );
+    const existingSignatureCount = existingApprovals[0]?.count || 0;
+    
+    console.log(`[Document Signing] Forwarded Document ${documentId}: Found ${existingSignatureCount} existing approved signatures`);
+
     // Update document status to Approved_Forwarded
     await pool.query(
       'INSERT INTO document_status (DOCUMENT_ID, STATUS, REMARKS, CREATED_AT) VALUES (?, "Approved_Forwarded", ?, NOW())',
@@ -900,6 +1105,49 @@ exports.approveForwardedDocument = async (req, res) => {
       'INSERT INTO document_approval (DOCUMENT_ID, USER_ID, ROLE, STATUS, REMARKS, DATE_APPROVED) VALUES (?, ?, "regional_director", 1, ?, NOW())',
       [documentId, userId, remarks || 'Approved by Regional Director']
     );
+
+    // Add signature to document
+    try {
+      // Get approver name from user table
+      const [users] = await pool.query('SELECT NAME FROM user WHERE USER_ID = ?', [userId]);
+      const approverName = users.length > 0 ? users[0].NAME : 'Unknown';
+
+      // Determine source file: Use SIGNED_FILE_LINK if exists (for cumulative signatures), otherwise use FILE_LINK
+      const sourceFilePath = document.SIGNED_FILE_LINK || document.FILE_LINK;
+      
+      console.log(`[Document Signing] Forwarded Document ${documentId}: Adding signature for ${approverName} (regional_director)`);
+      console.log(`[Document Signing] Source file: ${sourceFilePath}`);
+      
+      // Check if source file is a URL (external link) - skip signing for URLs
+      if (sourceFilePath && !sourceFilePath.startsWith('http://') && !sourceFilePath.startsWith('https://')) {
+        // Add signature to document (pass existingSignatureCount for proper positioning)
+        console.log(`[Document Signing] Starting signature process for document ${documentId}...`);
+        const signedFilePath = await addSignatureToDocument(
+          sourceFilePath,
+          approverName,
+          'regional_director',
+          documentId,
+          existingSignatureCount
+        );
+
+        console.log(`[Document Signing] Signature added successfully. Signed file: ${signedFilePath}`);
+
+        // Store signed file path in database (preserve original FILE_LINK and FINGERPRINT_HASH)
+        await pool.query(
+          'UPDATE document SET SIGNED_FILE_LINK = ? WHERE DOCUMENT_ID = ?',
+          [signedFilePath, documentId]
+        );
+        
+        console.log(`[Document Signing] Signed file path stored in database for document ${documentId}`);
+      } else {
+        console.log(`[Document Signing] Skipping signature for URL-based document: ${sourceFilePath}`);
+      }
+    } catch (signingError) {
+      // Log error but don't fail the approval process
+      console.error(`[Document Signing] ERROR adding signature to document ${documentId}:`, signingError);
+      console.error(`[Document Signing] Error stack:`, signingError.stack);
+      // Approval still succeeds even if signing fails
+    }
 
     // Archive the document
     await pool.query(
@@ -1046,8 +1294,52 @@ exports.getDocumentsBySection = async (req, res) => {
     
     documents = sectionDocuments;
     
-    // If user is Division Manager, also get forwarded documents
-    if (userRole === 'division_manager') {
+    // If user is Regional Director, get all forwarded documents without deduplication
+    if (userRole === 'regional_director') {
+      const [forwardedDocuments] = await pool.query(`
+        SELECT d.*, 
+               s.NAME as SECTION_NAME,
+               u.NAME as CREATED_BY_NAME,
+               u.FUNCTIONAL_ROLE as CREATED_BY_ROLE,
+               ds.STATUS as CURRENT_STATUS,
+               ds.REMARKS as CURRENT_REMARKS,
+               ds.CREATED_AT as STATUS_DATE,
+               'forwarded' as DOCUMENT_TYPE,
+               da.USER_ID as FORWARDED_BY_USER_ID,
+               fu.NAME as FORWARDED_BY_NAME,
+               da.ROLE as FORWARDED_BY_ROLE,
+               da.REMARKS as FORWARDED_REMARKS
+        FROM document d
+        LEFT JOIN section s ON d.SECTION_ID = s.SECTION_ID
+        LEFT JOIN user u ON d.CREATED_BY = u.USER_ID
+        LEFT JOIN (
+          SELECT DOCUMENT_ID, STATUS, REMARKS, CREATED_AT
+          FROM document_status 
+          WHERE STATUS_ID IN (
+            SELECT MAX(STATUS_ID) 
+            FROM document_status 
+            GROUP BY DOCUMENT_ID
+          )
+        ) ds ON d.DOCUMENT_ID = ds.DOCUMENT_ID
+        LEFT JOIN (
+          SELECT DOCUMENT_ID, USER_ID, ROLE, REMARKS
+          FROM document_approval 
+          WHERE STATUS = 1 AND (REMARKS LIKE '%Forwarded to Regional Director%' OR REMARKS LIKE '%forwarded%')
+        ) da ON d.DOCUMENT_ID = da.DOCUMENT_ID
+        LEFT JOIN user fu ON da.USER_ID = fu.USER_ID
+        WHERE (d.FORWARDED_TO_REGIONAL = 1 OR ds.STATUS = 'Under_Regional_Review')
+          AND NOT EXISTS (
+            SELECT 1 FROM archive a
+            WHERE a.DOCUMENT_ID = d.DOCUMENT_ID
+              AND a.VIEWER_USER_ID = ?
+              AND (a.CONTEXT = 'reports' OR a.CONTEXT IS NULL)
+          )
+        ORDER BY d.CREATED_AT DESC
+      `, [req.user.userId]);
+      
+      // For Regional Directors, show all forwarded documents without deduplication
+      documents = forwardedDocuments;
+    } else if (userRole === 'division_manager') {
       const [forwardedDocuments] = await pool.query(`
         SELECT d.*, 
                s.NAME as SECTION_NAME,
@@ -1221,8 +1513,13 @@ exports.downloadDocument = async (req, res) => {
       return res.status(403).json({ success: false, error: 'You do not have permission to view this document' });
     }
 
-    // Check if file exists
-    const filePath = document.FILE_LINK;
+    // Check if file exists - prioritize SIGNED_FILE_LINK if available, otherwise use FILE_LINK
+    const filePath = document.SIGNED_FILE_LINK || document.FILE_LINK;
+    
+    console.log(`[Download Document] Document ${documentId}:`);
+    console.log(`[Download Document] FILE_LINK: ${document.FILE_LINK}`);
+    console.log(`[Download Document] SIGNED_FILE_LINK: ${document.SIGNED_FILE_LINK}`);
+    console.log(`[Download Document] Selected file path: ${filePath}`);
     
     // If it's a URL (external link), return comprehensive metadata
     if (filePath && (filePath.startsWith('http://') || filePath.startsWith('https://'))) {
@@ -1274,6 +1571,7 @@ exports.downloadDocument = async (req, res) => {
     
     // If it's a local file path, serve the file with metadata
     if (filePath && fs.existsSync(filePath)) {
+      console.log(`[Download Document] File exists, serving: ${filePath}`);
       const fileName = path.basename(filePath);
       const fileExtension = path.extname(fileName).toLowerCase();
       const fileStats = fs.statSync(filePath);
@@ -1360,6 +1658,11 @@ exports.downloadDocument = async (req, res) => {
       fileStream.pipe(res);
       
     } else {
+      console.error(`[Download Document] ERROR: File not found at path: ${filePath}`);
+      console.error(`[Download Document] Document ID: ${documentId}`);
+      console.error(`[Download Document] Document TITLE: ${document.TITLE}`);
+      console.error(`[Download Document] FILE_LINK exists: ${document.FILE_LINK ? 'yes' : 'no'}`);
+      console.error(`[Download Document] SIGNED_FILE_LINK exists: ${document.SIGNED_FILE_LINK ? 'yes' : 'no'}`);
       return res.status(404).json({ success: false, error: 'File not found' });
     }
 

@@ -700,24 +700,40 @@ export function SectionUnitHeadReports() {
                   </button>
                 )}
                 
-                {(doc as any).FILE_PATH && (
-                  <button 
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => {
-                      const link = document.createElement('a')
-                      link.href = (doc as any).FILE_PATH
-                      link.download = (doc as any).FILE_NAME || doc.TITLE
-                      link.click()
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                      <polyline points="7,10 12,15 17,10"/>
-                      <line x1="12" y1="15" x2="12" y2="3"/>
-                    </svg>
-                    Download
-                  </button>
-                )}
+                <button 
+                  className="btn btn-secondary btn-sm"
+                  onClick={async () => {
+                    try {
+                      const result = await apiService.downloadDocument(doc.DOCUMENT_ID)
+                      if (result.success) {
+                        if (result.isUrl && result.url) {
+                          window.open(result.url, '_blank', 'noopener,noreferrer')
+                        } else if (result.blob) {
+                          const url = URL.createObjectURL(result.blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = result.filename || doc.TITLE || 'document'
+                          document.body.appendChild(a)
+                          a.click()
+                          document.body.removeChild(a)
+                          URL.revokeObjectURL(url)
+                        }
+                      } else {
+                        alert(result.error || 'Failed to download document')
+                      }
+                    } catch (error) {
+                      console.error('Download error:', error)
+                      alert('Failed to download document. Please try again.')
+                    }
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7,10 12,15 17,10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  Download
+                </button>
 
                 <button 
                   className="btn btn-outline btn-sm"
@@ -797,19 +813,35 @@ export function SectionUnitHeadReports() {
                   >
                     {user?.FUNCTIONAL_ROLE === 'regional_director' ? 'Review' : 'Feedback'}
                   </button>
-                  {(doc as any).FILE_PATH && (
-                    <button 
-                      className="btn btn-secondary btn-xs"
-                      onClick={() => {
-                        const link = document.createElement('a')
-                        link.href = (doc as any).FILE_PATH
-                        link.download = (doc as any).FILE_NAME || doc.TITLE
-                        link.click()
-                      }}
-                    >
-                      Download
-                    </button>
-                  )}
+                  <button 
+                    className="btn btn-secondary btn-xs"
+                    onClick={async () => {
+                      try {
+                        const result = await apiService.downloadDocument(doc.DOCUMENT_ID)
+                        if (result.success) {
+                          if (result.isUrl && result.url) {
+                            window.open(result.url, '_blank', 'noopener,noreferrer')
+                          } else if (result.blob) {
+                            const url = URL.createObjectURL(result.blob)
+                            const a = document.createElement('a')
+                            a.href = url
+                            a.download = result.filename || doc.TITLE || 'document'
+                            document.body.appendChild(a)
+                            a.click()
+                            document.body.removeChild(a)
+                            URL.revokeObjectURL(url)
+                          }
+                        } else {
+                          alert(result.error || 'Failed to download document')
+                        }
+                      } catch (error) {
+                        console.error('Download error:', error)
+                        alert('Failed to download document. Please try again.')
+                      }
+                    }}
+                  >
+                    Download
+                  </button>
                   <button 
                     className="btn btn-outline btn-xs"
                     onClick={() => { setReviewDoc(doc); setShowReviewModal(true) }}
@@ -1060,19 +1092,66 @@ export function SectionUnitHeadReports() {
                   }
                   return fileName || '—'
                 })()}</p>
-                {(() => {
-                  const fileLink = (reviewDoc as any).FILE_LINK || (reviewDoc as any).DOCUMENT_URL || (reviewDoc as any).FILE_PATH || ''
-                  return fileLink && (
-                    <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:8 }}>
-                      <a className="btn btn-secondary" href={fileLink as string} download>
-                        Download File
-                      </a>
-                      <a className="btn btn-outline" href={fileLink as string} target="_blank" rel="noopener noreferrer">
-                        Open in New Tab
-                      </a>
-                    </div>
-                  )
-                })()}
+                <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:8 }}>
+                  <button 
+                    className="btn btn-secondary" 
+                    onClick={async () => {
+                      if (!reviewDoc) return
+                      try {
+                        const result = await apiService.downloadDocument(reviewDoc.DOCUMENT_ID)
+                        if (result.success) {
+                          if (result.isUrl && result.url) {
+                            // For URL submissions, open in new tab
+                            window.open(result.url, '_blank', 'noopener,noreferrer')
+                          } else if (result.blob) {
+                            // For file submissions, download the blob
+                            const url = URL.createObjectURL(result.blob)
+                            const a = document.createElement('a')
+                            a.href = url
+                            a.download = result.filename || reviewDoc.TITLE || 'document'
+                            document.body.appendChild(a)
+                            a.click()
+                            document.body.removeChild(a)
+                            URL.revokeObjectURL(url)
+                          }
+                        } else {
+                          alert(result.error || 'Failed to download document')
+                        }
+                      } catch (error) {
+                        console.error('Download error:', error)
+                        alert('Failed to download document. Please try again.')
+                      }
+                    }}
+                  >
+                    Download File
+                  </button>
+                  <button 
+                    className="btn btn-outline" 
+                    onClick={async () => {
+                      if (!reviewDoc) return
+                      try {
+                        const result = await apiService.downloadDocument(reviewDoc.DOCUMENT_ID)
+                        if (result.success) {
+                          if (result.isUrl && result.url) {
+                            window.open(result.url, '_blank', 'noopener,noreferrer')
+                          } else if (result.blob) {
+                            const url = URL.createObjectURL(result.blob)
+                            window.open(url, '_blank', 'noopener,noreferrer')
+                            // Note: We can't revoke the URL immediately as it's used by the new window
+                            // It will be cleaned up when the window closes
+                          }
+                        } else {
+                          alert(result.error || 'Failed to open document')
+                        }
+                      } catch (error) {
+                        console.error('Open error:', error)
+                        alert('Failed to open document. Please try again.')
+                      }
+                    }}
+                  >
+                    Open in New Tab
+                  </button>
+                </div>
               </div>
 
               {reviewDoc.DESCRIPTION && (

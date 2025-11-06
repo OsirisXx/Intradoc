@@ -207,19 +207,17 @@ export function StaffDocumentWorks() {
               <table>
                 <thead>
                   <tr>
-                    <th>TITLE</th>
-                    <th>STATUS</th>
-                    <th>SHA-256</th>
-                    <th>CREATED</th>
+                    <th style={{ textAlign: 'left' }}>TITLE</th>
+                    <th style={{ textAlign: 'left' }}>STATUS</th>
+                    <th style={{ textAlign: 'left' }}>CREATED</th>
                   </tr>
                 </thead>
                 <tbody>
                   {userDocuments.map(doc => (
                     <tr key={doc.DOCUMENT_ID}>
                       <td style={{ textAlign: 'left' }}>{doc.TITLE}</td>
-                      <td>{getStatusBadge(doc.currentStatus?.STATUS || 'Submitted')}</td>
-                      <td>{doc.FINGERPRINT_HASH.substring(0, 12)}...</td>
-                      <td>{formatDate(doc.CREATED_AT)}</td>
+                      <td style={{ textAlign: 'left' }}>{getStatusBadge(doc.currentStatus?.STATUS || 'Submitted')}</td>
+                      <td style={{ textAlign: 'left' }}>{formatDate(doc.CREATED_AT)}</td>
                     </tr>
                   ))}
                 </tbody>

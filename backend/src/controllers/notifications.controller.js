@@ -15,7 +15,8 @@ exports.getUserNotifications = async (req, res) => {
         sn.ACTION_URL,
         sn.RELATED_TASK_ID,
         sn.IS_READ,
-        sn.CREATED_AT
+        sn.CREATED_AT,
+        sn.READ_AT
       FROM SYSTEM_NOTIFICATION sn
       WHERE sn.USER_ID = ?
     `;
@@ -98,7 +99,7 @@ exports.markAsRead = async (req, res) => {
     }
 
     await pool.query(
-      'UPDATE SYSTEM_NOTIFICATION SET IS_READ = 1 WHERE NOTIFICATION_ID = ?',
+      'UPDATE SYSTEM_NOTIFICATION SET IS_READ = 1, READ_AT = NOW() WHERE NOTIFICATION_ID = ?',
       [notificationId]
     );
 
@@ -118,7 +119,7 @@ exports.markAllAsRead = async (req, res) => {
     const { userId } = req.params;
 
     await pool.query(
-      'UPDATE SYSTEM_NOTIFICATION SET IS_READ = 1 WHERE USER_ID = ?',
+      'UPDATE SYSTEM_NOTIFICATION SET IS_READ = 1, READ_AT = NOW() WHERE USER_ID = ? AND IS_READ = 0',
       [userId]
     );
 

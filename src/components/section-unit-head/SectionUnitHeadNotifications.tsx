@@ -69,9 +69,10 @@ const SectionUnitHeadNotifications: React.FC<SectionUnitHeadNotificationsProps> 
       await apiService.markNotificationAsRead(notificationId);
       
       // Update local state
+      const now = new Date().toISOString()
       setNotifications(prev => prev.map(notification => 
         notification.NOTIFICATION_ID === notificationId 
-          ? { ...notification, IS_READ: true }
+          ? { ...notification, IS_READ: true, READ_AT: now }
           : notification
       ));
 
@@ -85,15 +86,15 @@ const SectionUnitHeadNotifications: React.FC<SectionUnitHeadNotificationsProps> 
 
   const markAllAsRead = async () => {
     try {
-      const unreadNotifications = notifications.filter(n => !n.IS_READ);
+      if (!user) return;
       
-      for (const notification of unreadNotifications) {
-        await apiService.markNotificationAsRead(notification.NOTIFICATION_ID);
-      }
+      // Use the backend bulk endpoint for better performance
+      await apiService.markAllNotificationsAsRead(user.USER_ID);
       
       // Update local state
+      const now = new Date().toISOString()
       setNotifications(prev => prev.map(notification => 
-        ({ ...notification, IS_READ: true })
+        ({ ...notification, IS_READ: true, READ_AT: notification.IS_READ ? notification.READ_AT : now })
       ));
 
       // Dispatch custom event to notify sidebar of count change
@@ -597,8 +598,20 @@ const SectionUnitHeadNotifications: React.FC<SectionUnitHeadNotificationsProps> 
 
                     <div className="card-footer">
                       <div className="notification-time">
-                        <span className="time-relative">{formatRelativeTime(notification.CREATED_AT)}</span>
-                        <span className="time-absolute">• {formatDate(notification.CREATED_AT)}</span>
+                        {notification.IS_READ && notification.READ_AT ? (
+                          <>
+                            <span className="time-relative">Read: {formatRelativeTime(notification.READ_AT)}</span>
+                            <span className="time-absolute">• {formatDate(notification.READ_AT)}</span>
+                            <span className="time-absolute" style={{ marginLeft: '8px', fontSize: '0.85em', color: '#64748b' }}>
+                              • Created: {formatDate(notification.CREATED_AT)}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="time-relative">{formatRelativeTime(notification.CREATED_AT)}</span>
+                            <span className="time-absolute">• {formatDate(notification.CREATED_AT)}</span>
+                          </>
+                        )}
                       </div>
 
                       <div className="card-actions">

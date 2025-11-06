@@ -127,7 +127,10 @@ export function DivisionManagerDashboard() {
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     })
   }
 
@@ -589,7 +592,6 @@ export function DivisionManagerDashboard() {
                   <th style={{ width: '12%', textAlign: 'center' }}>CURRENT STATUS</th>
                   <th style={{ width: '12%', textAlign: 'center' }}>NEXT STEP</th>
                   <th style={{ width: '12%', textAlign: 'center' }}>DEPARTMENT</th>
-                  <th style={{ width: '12%', textAlign: 'center' }}>SHA-256</th>
                   <th style={{ width: '12%', textAlign: 'center' }}>UPLOADED BY</th>
                   <th style={{ width: '20%', textAlign: 'center' }}>LAST UPDATED</th>
                 </tr>
@@ -613,11 +615,6 @@ export function DivisionManagerDashboard() {
                     <td style={{ textAlign: 'center', padding: '12px 8px' }}>
                       <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
                         {doc.SECTION_NAME || 'Unknown'}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'center', padding: '12px 8px' }}>
-                      <span style={{ fontSize: '0.875rem', color: '#6b7280', fontFamily: 'monospace' }}>
-                        {doc.FINGERPRINT_HASH ? doc.FINGERPRINT_HASH.substring(0, 12) + '...' : 'N/A'}
                       </span>
                     </td>
                     <td style={{ textAlign: 'center', padding: '12px 8px' }}>

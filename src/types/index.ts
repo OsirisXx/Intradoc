@@ -275,6 +275,7 @@ export interface Document {
   FORWARDED_TO_REGIONAL?: boolean;
   FORWARDED_BY?: number;
   FORWARDED_AT?: string;
+  SIGNED_FILE_LINK?: string; // Path to signed version of document
 }
 
 export interface DocumentApproval {
@@ -342,6 +343,7 @@ export interface SystemNotification {
   MESSAGE: string;
   IS_READ: boolean;
   CREATED_AT: string;
+  READ_AT: string | null;
 }
 
 export interface Feedback {
@@ -479,6 +481,7 @@ export interface TaskNotification {
   RELATED_FEEDBACK_ID?: number;
   IS_READ: boolean;
   CREATED_AT: string;
+  READ_AT: string | null;
   ACTION_URL?: string; // Where to navigate when clicked
 }
 

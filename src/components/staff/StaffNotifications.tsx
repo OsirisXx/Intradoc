@@ -49,10 +49,11 @@ export function StaffNotifications() {
     try {
       const response = await apiService.markNotificationAsRead(notificationId)
       if (response.success) {
+        const now = new Date().toISOString()
         setNotifications(prev => 
           prev.map(notif => 
             notif.NOTIFICATION_ID === notificationId 
-              ? { ...notif, IS_READ: true }
+              ? { ...notif, IS_READ: true, READ_AT: now }
               : notif
           )
         )
@@ -84,8 +85,9 @@ export function StaffNotifications() {
       const response = await apiService.markAllNotificationsAsRead(user.USER_ID)
       if (response.success) {
         // Update local state to reflect all notifications as read
+        const now = new Date().toISOString()
         setNotifications(prev => 
-          prev.map(notif => ({ ...notif, IS_READ: true }))
+          prev.map(notif => ({ ...notif, IS_READ: true, READ_AT: notif.IS_READ ? notif.READ_AT : now }))
         )
       }
     } catch (error) {
@@ -359,7 +361,16 @@ export function StaffNotifications() {
                 
                 <div className="card-footer">
                   <div className="notification-time">
-                    <span className="time-relative">{formatDate(notification.CREATED_AT)}</span>
+                    <span className="time-relative">
+                      {notification.IS_READ && notification.READ_AT 
+                        ? `Read: ${formatDate(notification.READ_AT)}` 
+                        : `Created: ${formatDate(notification.CREATED_AT)}`}
+                    </span>
+                    {notification.IS_READ && notification.READ_AT && (
+                      <span className="time-absolute" style={{ marginLeft: '8px', fontSize: '0.85em', color: '#64748b' }}>
+                        • Created: {formatDate(notification.CREATED_AT)}
+                      </span>
+                    )}
                   </div>
                   
                   <div className="card-actions">

@@ -27,6 +27,7 @@ export default function DivisionManagerTaskDetail() {
   const [approvedNoDocs, setApprovedNoDocs] = useState(false)
   // Approval history for the current user
   const [approvalHistory, setApprovalHistory] = useState<any[]>([])
+  const [loadingApprovalHistory, setLoadingApprovalHistory] = useState(true)
 
   useEffect(() => {
     if (taskId && user) {
@@ -81,8 +82,12 @@ export default function DivisionManagerTaskDetail() {
   }
 
   const loadApprovalHistory = async () => {
-    if (!taskId || !user) return
+    if (!taskId || !user) {
+      setLoadingApprovalHistory(false)
+      return
+    }
     try {
+      setLoadingApprovalHistory(true)
       // Get approval history for documents in this task by the current user
       const response = await apiService.getTaskApprovalHistory(parseInt(taskId), user.USER_ID)
       if (response.success) {
@@ -90,6 +95,8 @@ export default function DivisionManagerTaskDetail() {
       }
     } catch (error) {
       console.error('Error loading approval history:', error)
+    } finally {
+      setLoadingApprovalHistory(false)
     }
   }
 
@@ -132,12 +139,10 @@ export default function DivisionManagerTaskDetail() {
         setApprovedNoDocs(true)
       }
       
-      // Add a small delay to ensure backend has finished updating
-      setTimeout(async () => {
-        await loadTask()
-        await loadTaskDocuments()
-        await loadApprovalHistory()
-      }, 500)
+      // Reload data to update UI immediately
+      await loadApprovalHistory() // Reload approval history first to update UI
+      await loadTask()
+      await loadTaskDocuments()
     } catch (error) {
       console.error('Approval error:', error)
       alert((error as Error).message)
@@ -209,6 +214,11 @@ export default function DivisionManagerTaskDetail() {
   const taskNeedsDivisionReview = () => {
     if (!task || !user) return false
     
+    // Don't show review section until approval history is loaded to avoid showing approve button when already approved
+    if (loadingApprovalHistory) {
+      return false
+    }
+    
     // Task must be completed
     if (task.STATUS !== 'completed') {
       return false
@@ -220,9 +230,18 @@ export default function DivisionManagerTaskDetail() {
       return false
     }
     
-    // Don't show review section if user has already approved
-    if (hasUserAlreadyApproved()) {
+    // Don't show review section if user has already approved or rejected
+    if (hasUserAlreadyApproved() || hasUserAlreadyRejected()) {
       return false
+    }
+    
+    // Also check if all documents are already approved (for tasks with documents)
+    // This provides an additional check beyond approval history
+    if (taskDocuments.length > 0) {
+      const allDocumentsApproved = taskDocuments.every(doc => doc.currentStatus?.STATUS === 'Approved')
+      if (allDocumentsApproved) {
+        return false
+      }
     }
     
     // Show review section for any completed task assigned BY the division manager
@@ -387,7 +406,7 @@ export default function DivisionManagerTaskDetail() {
                   <button 
                     type="button"
                     onClick={handleApproveTask}
-                    disabled={processingReview}
+                    disabled={processingReview || hasUserAlreadyApproved() || hasUserAlreadyRejected()}
                     className="btn btn-success"
                   >
                     {processingReview ? 'Processing...' : 'Approve Document'}
@@ -396,7 +415,7 @@ export default function DivisionManagerTaskDetail() {
                   <button 
                     type="button"
                     onClick={handleRejectTask}
-                    disabled={processingReview}
+                    disabled={processingReview || hasUserAlreadyApproved() || hasUserAlreadyRejected()}
                     className="btn btn-danger"
                   >
                     {processingReview ? 'Processing...' : 'Request Revision'}
@@ -442,7 +461,7 @@ export default function DivisionManagerTaskDetail() {
             )}
 
             {/* Already Actioned Section */}
-            {((task as any).ASSIGNED_BY === user?.USER_ID) && task.STATUS === 'completed' && !taskNeedsDivisionReview() && approvalHistory.length === 0 && (
+            {((task as any).ASSIGNED_BY === user?.USER_ID) && task.STATUS === 'completed' && !taskNeedsDivisionReview() && approvalHistory.length === 0 && !taskDocumentsApproved() && (
               <div className="already-actioned-section">
                 <h3>Task Status</h3>
                 <div className="actioned-info">
